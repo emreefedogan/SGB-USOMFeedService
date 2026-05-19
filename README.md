@@ -156,6 +156,18 @@ Servis ayağa kalktığında aşağıdaki uç noktalara hizmet verir:
 | `/sync/full` | POST | Manuel olarak tam senkronizasyon görevini tetikler. |
 | `/sync/crowdstrike` | POST | Gönderilmemiş IP ve Domain'leri manuel olarak CrowdStrike'a basar. |
 
+---
+
+## 📸 Ekran Görüntüleri
+
+#### 1. İnteraktif API Dokümantasyonu (Swagger UI - `/docs`)
+![Swagger UI API Dokümantasyonu](screenshots/docs.png)
+
+#### 2. Servis Sağlık ve Senkronizasyon Durumu (JSON - `/health`)
+![Servis Sağlık Durumu](screenshots/health.png)
+
+---
+
 ## 🛡️ Güvenlik Cihazı (Firewall) Entegrasyon Örneği
 
 Örneğin **Palo Alto Networks** üzerinde bir EDL (External Dynamic List) tanımlamak için:
