@@ -1,6 +1,6 @@
 # 🛡️ SGB - USOM Zararlı IP ve Domain Listesi Güvenlik Cihazları Entegrasyon Servisi
 
-USOM (Ulusal Siber Olaylara Müdahale Merkezi), zararlı bağlantılar listesini (IP ve Domain) 1 Haziran 2026 itibarıyla statik `.txt` dosyası yerine sadece **API** üzerinden sunmaya başlayacaktır.
+Siber Güvenlik Başkanlığı (SGB) / USOM tarafından yapılan bilgilendirmeye göre, `url-list.txt` formatında paylaşılan zararlı bağlantılar listesi hizmeti 1 Haziran 2026 tarihi itibarıyla sona erecek; zararlı bağlantı verileri bundan sonra yalnızca API altyapısı üzerinden paylaşılacaktır.
 **USOM List Service**, doğrudan karmaşık API entegrasyonu (özellikle sayfalama, rate-limit vb. özellikleri) desteklemeyen, **External Dynamic List (EDL)** olarak sadece düz metin (plain text) formatındaki IP ve Domain listelerini tüketebilen Güvenlik Duvarı (Palo Alto, Fortinet vb.), WAF ve Mail Gateway'ler için geliştirilmiş **ara katman olarak kullanılabilecek, self-hosted kullanılabilecek açık kaynaklı bir projedir.**
 
 ## ✨ Öne Çıkan Özellikler
