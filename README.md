@@ -27,14 +27,28 @@ git clone https://github.com/emreefedogan/SGB-USOMFeedService.git
 cd SGB-USOMFeedService
 ```
 
-### 2. Python Sanal Ortamı (venv) Oluşturun ve Aktif Edin
+### 2. Python ve Sanal Ortam (venv) Kurulumu
 
-Gerekli Python paketlerinin sistem genelini etkilememesi için bir sanal ortam oluşturun:
+Gerekli Python paketlerinin sistem genelini etkilememesi için bir sanal ortam oluşturun. Kullanmakta olduğunuz Linux dağıtımına göre gerekli paketleri yükleyin:
+
+**Debian / Ubuntu:**
+```bash
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -Syu python python-pip
+```
+
+**RedHat / CentOS / Fedora:**
+```bash
+sudo dnf install -y python3 python3-pip
+```
+
+Ardından sanal ortamı oluşturup aktif edin:
 
 ```bash
-# Python venv paketini kurun (Eğer kurulu değilse)
-sudo apt update && sudo apt install -y python3-venv python3-pip
-
 # Sanal ortamı oluşturun
 python3 -m venv venv
 
