@@ -1,7 +1,6 @@
-# 🛡️ Siber Güvenlik Başkanlığı SGB - USOM Tehdit İstihbaratı Besleme Servisi — API'den Düz Metne (EDL) & Güvenlik Ürünleri Entegrasyonu
+# 🛡️ SGB - USOM Zararlı IP ve Domain Listesi Güvenlik Cihazları Entegrasyon Servisi
 
 USOM (Ulusal Siber Olaylara Müdahale Merkezi), zararlı bağlantılar listesini (IP ve Domain) 1 Haziran 2026 itibarıyla statik `.txt` dosyası yerine sadece **API** üzerinden sunmaya başlayacaktır.
-
 **USOM List Service**, doğrudan karmaşık API entegrasyonu (özellikle sayfalama, rate-limit vb. özellikleri) desteklemeyen, **External Dynamic List (EDL)** olarak sadece düz metin (plain text) formatındaki IP ve Domain listelerini tüketebilen Güvenlik Duvarı (Palo Alto, Fortinet vb.), WAF ve Mail Gateway'ler için geliştirilmiş **açık kaynaklı, yüksek performanslı bir ara katmandır (middleware)**.
 
 ## ✨ Öne Çıkan Özellikler
