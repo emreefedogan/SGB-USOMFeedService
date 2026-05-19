@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Veritabanı (SQLite)
+*.db
+*.db-shm
+*.db-wal
+
+# Ortam değişkenleri (hassas bilgiler)
+.env
+
+# IDE / Editör
+.vscode/
+.idea/
+pyrightconfig.json
+
+# Docker (kişisel konfigürasyon)
+Dockerfile
+docker-compose.yml
+
+# Deploy & Servis (kişisel IP/path içerir)
+deploy.sh
+usom-list-service.service
+
+# Proje notları (kişisel)
+PROMO.md

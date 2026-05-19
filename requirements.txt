@@ -1,0 +1,21 @@
+# ── USOM List Service Bağımlılıkları ──
+
+# Web Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Asenkron HTTP İstemcisi
+httpx>=0.27.0
+
+# Retry / Hata Dayanıklılığı
+tenacity>=8.5.0
+
+# Zamanlanmış Görevler (Cron)
+apscheduler>=3.10.0
+
+# Asenkron SQLite
+aiosqlite>=0.20.0
+
+# CrowdStrike Integration & Config
+crowdstrike-falconpy>=1.4.0
+python-dotenv>=1.0.0
