@@ -18,32 +18,105 @@ USOM (Ulusal Siber Olaylara Müdahale Merkezi), zararlı bağlantılar listesini
 
 ## 🛠️ Kurulum
 
-Projeyi **Docker** veya doğrudan **Systemd** servisi (Host üzerinde) olarak çalıştırabilirsiniz.
+Projeyi Linux sunucunuzda sanal ortam (virtual environment - venv) kullanarak ayağa kaldırmak için aşağıdaki adımları takip edebilirsiniz.
 
-### 1. Docker ile Kurulum (Önerilen)
+### 1. Depoyu Klonlayın ve Klasöre Geçin
 
 ```bash
-git clone https://github.com/KULLANICI_ADINIZ/USOMListService.git
-cd USOMListService
+git clone https://github.com/emreefedogan/SGB-USOMFeedService.git
+cd SGB-USOMFeedService
+```
 
-# Ortam değişkenlerini kopyalayın
+### 2. Python Sanal Ortamı (venv) Oluşturun ve Aktif Edin
+
+Gerekli Python paketlerinin sistem genelini etkilememesi için bir sanal ortam oluşturun:
+
+```bash
+# Python venv paketini kurun (Eğer kurulu değilse)
+sudo apt update && sudo apt install -y python3-venv python3-pip
+
+# Sanal ortamı oluşturun
+python3 -m venv venv
+
+# Sanal ortamı aktif edin
+source venv/bin/activate
+```
+
+### 3. Bağımlılıkları Yükleyin
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Yapılandırma Dosyasını Hazırlayın
+
+Ortam değişkenleri dosyasını kopyalayın ve düzenleyin (CrowdStrike entegrasyonu kullanacaksanız Falcon API bilgilerini girin, istemiyorsanız boş bırakabilirsiniz):
+
+```bash
 cp .env.example .env
-
-# Docker-compose ile arka planda başlatın
-docker-compose up -d --build
+nano .env
 ```
-Servis, 8000 portunda dinlemeye başlayacaktır. Veritabanı `usom_ips.db` olarak dışarıya (volume) map edilir.
 
-### 2. Systemd ile Host Üzerinde Kurulum
+### 5. Uygulamayı Başlatın
 
-Debian/Ubuntu tabanlı bir sunucuda projeyi direkt servis olarak ayağa kaldırmak için:
+Uygulamayı uvicorn ile başlatarak test edebilirsiniz:
 
 ```bash
-git clone https://github.com/KULLANICI_ADINIZ/USOMListService.git
-cd USOMListService
-sudo ./deploy.sh
+uvicorn main:app --host 0.0.0.0 --port 8000
 ```
-Bu script gerekli paketleri kuracak, `venv` oluşturacak, `.env` dosyasını ayarlayacak ve `usom-list-service` adlı systemd servisini başlatacaktır.
+Servis `http://<sunucu_ip>:8000` portundan yayına başlayacaktır.
+
+---
+
+## 🖥️ Systemd Servisi Olarak Arka Planda Çalıştırma
+
+Uygulamanın sunucu yeniden başladığında otomatik açılması ve arka planda sürekli çalışması için bir Systemd servis dosyası oluşturabilirsiniz.
+
+1. `/etc/systemd/system/usom-feed.service` dosyasını oluşturun:
+
+```bash
+sudo nano /etc/systemd/system/usom-feed.service
+```
+
+2. Aşağıdaki şablonu kendi kullanıcı adınız ve dizin yolunuza göre düzenleyip yapıştırın:
+
+```ini
+[Unit]
+Description=USOM Malicious Threat Intelligence Feed Service
+After=network.target
+
+[Service]
+User=KULLANICI_ADINIZ
+Group=KULLANICI_ADINIZ
+WorkingDirectory=/home/KULLANICI_ADINIZ/SGB-USOMFeedService
+Environment="PATH=/home/KULLANICI_ADINIZ/SGB-USOMFeedService/venv/bin"
+ExecStart=/home/KULLANICI_ADINIZ/SGB-USOMFeedService/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=usom-feed-service
+
+[Install]
+WantedBy=multi-user.target
+```
+
+3. Servisi etkinleştirin ve başlatın:
+
+```bash
+# systemd yapılandırmasını yeniden yükleyin
+sudo systemctl daemon-reload
+
+# Servisi başlangıçta otomatik çalışacak şekilde ayarlayın
+sudo systemctl enable usom-feed.service
+
+# Servisi başlatın
+sudo systemctl start usom-feed.service
+
+# Durumunu kontrol edin
+sudo systemctl status usom-feed.service
+```
 
 ## ⚙️ Konfigürasyon (`.env`)
 
