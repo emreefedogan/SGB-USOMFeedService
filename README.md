@@ -1,4 +1,4 @@
-# 🛡️ USOM Threat Intelligence Feed Service — API to Plain Text (EDL) & CrowdStrike Falcon Entegrasyon Köprüsü
+# 🛡️ USOM Threat Intelligence Feed Service — API to Plain Text (EDL) & Güvenlik Ürünleri Entegrasyonu
 
 USOM (Ulusal Siber Olaylara Müdahale Merkezi), zararlı bağlantılar listesini (IP ve Domain) 1 Haziran 2026 itibarıyla statik `.txt` dosyası yerine sadece **API** üzerinden sunmaya başlayacaktır.
 
