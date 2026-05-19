@@ -168,13 +168,55 @@ Servis ayağa kalktığında aşağıdaki uç noktalara hizmet verir:
 
 ---
 
-## 🛡️ Güvenlik Cihazı (Firewall) Entegrasyon Örneği
+## 🤝 Güvenlik Ürünleri Entegrasyon Kılavuzu
 
-Örneğin **Palo Alto Networks** üzerinde bir EDL (External Dynamic List) tanımlamak için:
-1. Objects > External Dynamic Lists menüsüne gidin.
-2. Type olarak **IP List** veya **Domain List** seçin.
-3. Source (URL) kısmına: `http://<sunucu_ip>:8000/usom-ips` (veya `usom-domains`) yazın.
-4. Check for updates (Senkronizasyon) periyodunu **Hourly** (Saatlik) olarak ayarlayın.
+Servisin sunduğu beslemeleri (feeds) kurumsal güvenlik ürünlerinize entegre etmek için aşağıdaki adımları izleyebilirsiniz.
+
+### 1. Güvenlik Duvarı ve Ağ Güvenlik Cihazları (EDL / Threat Feed)
+
+Bu entegrasyon yöntemi, `/usom-ips` ve `/usom-domains` uç noktalarından dönen düz metin listelerini otomatik olarak çekerek engelleme kurallarında kullanır.
+
+#### 🧱 Palo Alto Networks (External Dynamic List - EDL)
+1. **Objects > External Dynamic Lists** menüsüne gidin ve **Add** butonuna tıklayın.
+2. **Name** alanına anlamlı bir isim verin (Örn: `USOM-Zarafli-IPler`).
+3. **Type** olarak `IP List` veya `Domain List` seçin.
+4. **Source** alanına ilgili endpoint adresini girin:
+   - IP'ler için: `http://<sunucu_ip>:8000/usom-ips`
+   - Domainler için: `http://<sunucu_ip>:8000/usom-domains`
+5. **Check for updates** (Güncelleme Sıklığı) değerini **Hourly** (Saatlik) olarak ayarlayın.
+6. Bu EDL nesnesini Security Policies (Güvenlik Kuralları) altında kaynak (source) veya hedef (destination) engelleme kurallarınıza dahil edin.
+
+#### 🛡️ Fortinet FortiGate (Threat Feed / External Connector)
+1. **Security Fabric > External Connectors** menüsüne gidin.
+2. **Create New** diyerek **Threat Feeds** altından `IP Address` veya `Domain Name` seçeneğini seçin.
+3. **Name** alanını doldurun (Örn: `USOM_Domain_Feed`).
+4. **URL of external server** alanına endpoint adresini girin:
+   - `http://<sunucu_ip>:8000/usom-domains` (veya `/usom-ips`)
+5. **Refresh Interval** değerini **Hourly** olarak ayarlayın.
+6. Oluşturulan bu konnektörü Firewall Policy altında engelleme nesnesi olarak kullanın.
+
+---
+
+### 2. CrowdStrike Falcon EDR/XDR Entegrasyonu (IOC Push)
+
+Servis, USOM'dan çekilen zararlı göstergeleri (indicators) asenkron olarak doğrudan CrowdStrike Falcon platformuna basar.
+
+#### 🔑 Gerekli API İzinleri (Scope)
+CrowdStrike Falcon Console üzerinde **Support and Resources > API Clients and Keys** alanından yeni bir API Client oluşturun. Atamanız gereken minimum yetki (scope) düzeyi şu şekildedir:
+* **Indicators (IOCs):** `Write` ve `Read`
+
+#### ⚙️ Yapılandırma (`.env`)
+Oluşturduğunuz API kimlik bilgilerini projenin `.env` dosyasına girin:
+```ini
+# CrowdStrike Falcon API Ayarları
+FALCON_CLIENT_ID="KAYITLI_CLIENT_ID"
+FALCON_CLIENT_SECRET="KAYITLI_CLIENT_SECRET"
+FALCON_IOC_ACTION="detect" # "detect" (sadece alarm üret) veya "prevent" (doğrudan engelle)
+```
+
+#### ⚙️ Çalışma Mantığı ve False-Positive Önleme
+- **Asenkron Gönderim:** Senkronizasyon tamamlandığında, veritabanına yeni eklenen ve CrowdStrike'a henüz basılmamış olan tüm göstergeler toplu olarak (batch) CrowdStrike Indicators API'sine gönderilir.
+- **Whitelist Koruması:** `main.py` içinde yer alan `WHITELISTED_DOMAINS` listesi sayesinde (Microsoft, Google, Github vb. kritik servisler) CrowdStrike'a IOC olarak gönderilmez. Bu sayede kurumsal altyapınızda yaşanabilecek false-positive kesintilerin önüne geçilir.
 
 ## 📝 Lisans
 
