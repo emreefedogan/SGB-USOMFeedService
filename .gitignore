@@ -12,6 +12,10 @@ __pycache__/
 # Ortam değişkenleri (hassas bilgiler)
 .env
 
+# Log dosyaları
+logs/
+*.log
+
 # IDE / Editör
 .vscode/
 .idea/

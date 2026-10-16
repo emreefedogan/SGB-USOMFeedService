@@ -1,0 +1,2350 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{SERVICE_TITLE}} — Durum Panosu</title>
+<!-- Gömülü favicon: tarayıcı aksi hâlde /favicon.ico isteyip 404 alıyor ve
+     her sayfa açılışı erişim log'una gereksiz bir hata satırı yazıyor. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23c82228'/%3E%3Crect x='8' y='9' width='16' height='3' rx='1.5' fill='white'/%3E%3Crect x='8' y='15' width='16' height='3' rx='1.5' fill='white' opacity='.75'/%3E%3Crect x='8' y='21' width='10' height='3' rx='1.5' fill='white' opacity='.5'/%3E%3C/svg%3E">
+<style>
+  /* Doğrulanmış palet (dataviz referans örneği).
+     Kategorik yuvalar 1-3: mavi / turuncu / aqua — her iki modda da
+     tüm-çift eşiklerini geçer. Açık modda aqua 3:1 kontrastın altında
+     kaldığı için her değer görünür etiket taşır (relief kuralı). */
+  :root {
+    color-scheme: light;
+    --plane:        #f9f9f7;
+    --surface:      #fcfcfb;
+    --ink:          #0b0b0b;
+    --ink-2:        #52514e;
+    --muted:        #898781;
+    --hairline:     #e1e0d9;
+    --ring:         rgba(11,11,11,0.10);
+    --s-ip:         #2a78d6;
+    --s-domain:     #eb6834;
+    --s-hash:       #1baf7a;
+    --track-ip:     #cde2fb;
+    --track-domain: #fbdccf;
+    --track-hash:   #c4ecdd;
+    --good:         #0ca30c;
+    --warning:      #fab219;
+    --critical:     #d03b3b;
+    --good-text:    #006300;
+  }
+  /* Koyu mod iki koşulda devreye girer ve CSS bir kural bloğunu iki farklı
+     koşula bağlamaya izin vermiyor (media sorgusu ile öznitelik seçicisi aynı
+     seçici listesinde birleşemez), bu yüzden değerler bilinçli olarak iki kez
+     yazıldı:
+       1) sistem koyu modda VE kullanıcı açık moda kilitlememişse
+       2) kullanıcı koyu modu elle seçmişse (sistem ne derse desin)
+     İkisi de aynı adımları kullanır — koyu mod açık modun otomatik
+     ters çevrilmesi değil, ayrıca seçilmiş bir ramp. */
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --plane:        #0d0d0d;
+      --surface:      #1a1a19;
+      --ink:          #ffffff;
+      --ink-2:        #c3c2b7;
+      --muted:        #898781;
+      --hairline:     #2c2c2a;
+      --ring:         rgba(255,255,255,0.10);
+      --s-ip:         #3987e5;
+      --s-domain:     #d95926;
+      --s-hash:       #199e70;
+      --track-ip:     #184f95;
+      --track-domain: #6b2c13;
+      --track-hash:   #0d4f38;
+      --good-text:    #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:        #0d0d0d;
+    --surface:      #1a1a19;
+    --ink:          #ffffff;
+    --ink-2:        #c3c2b7;
+    --muted:        #898781;
+    --hairline:     #2c2c2a;
+    --ring:         rgba(255,255,255,0.10);
+    --s-ip:         #3987e5;
+    --s-domain:     #d95926;
+    --s-hash:       #199e70;
+    --track-ip:     #184f95;
+    --track-domain: #6b2c13;
+    --track-hash:   #0d4f38;
+    --good-text:    #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 20px 48px;
+    background: var(--plane);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  /* ── Başlık ── */
+  header {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    align-items: baseline; justify-content: space-between;
+    padding-bottom: 16px; margin-bottom: 24px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  h1 { font-size: 19px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+  /* ── Marka satırı ──
+     Kurum logosu bilinçli olarak yok: pano tek dosyalık ve harici istek
+     açmayan bir yapıda, bu yüzden logo eklemek isteyen kurulumlar görseli
+     data URI olarak .brandrow içine koyabilir. Servis adı {{SERVICE_TITLE}}
+     yer tutucusundan geliyor ve .env'deki SERVICE_TITLE ile değiştirilir. */
+  .brandrow { display: flex; align-items: center; gap: 14px; }
+  .live { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+  .pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--good); flex: none;
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .28 } }
+  @media (prefers-reduced-motion: reduce) { .pulse { animation: none } }
+
+  /* ── Durum şeridi ── */
+  .banner {
+    display: flex; align-items: center; gap: 11px;
+    padding: 13px 16px; border-radius: 10px; margin-bottom: 22px;
+    border: 1px solid var(--ring); background: var(--surface);
+    font-size: 14px;
+  }
+  .banner .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .banner strong { font-weight: 620; }
+  .banner .why { color: var(--ink-2); }
+
+  /* ── Kahraman rakam ── */
+  .hero {
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 12px; padding: 26px 24px; margin-bottom: 18px;
+  }
+  .hero .label { font-size: 13px; color: var(--ink-2); }
+  .hero .value {
+    font-size: 56px; font-weight: 660; line-height: 1.05;
+    letter-spacing: -0.025em; margin: 6px 0 4px;
+  }
+  .hero .note { font-size: 13px; color: var(--muted); }
+
+  /* ── KPI satırı ── */
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 12px; padding: 18px 18px 16px;
+  }
+  .tile .head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .tile .name { font-size: 13.5px; font-weight: 600; }
+  .tile .src { font-size: 11.5px; color: var(--muted); margin-left: auto; }
+  .tile .big { font-size: 30px; font-weight: 640; letter-spacing: -0.02em; line-height: 1.1; }
+  .tile .cap { font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+
+  /* Ölçer: dolgu seri rengi, boş kısım aynı rampanın açık adımı */
+  .meter { height: 7px; border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
+  .meter > i { display: block; height: 100%; border-radius: 4px; transition: width .5s ease; }
+  .mrow { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); }
+  .mrow b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* Bloke satırı yalnızca sıfırdan farklıysa gösterilir; normal durumda
+     kutuyu kalabalıklaştırmaması için gizli. */
+  .blocked-row { margin-top: 4px; color: var(--muted); }
+  .blocked-row b { color: var(--critical); }
+
+  /* ── Bilgi ızgarası ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 12px; padding: 18px;
+  }
+  .panel h2 {
+    font-size: 12px; font-weight: 620; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--muted); margin: 0 0 14px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  td { padding: 7px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { color: var(--ink-2); padding-right: 14px; }
+  td:last-child { text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; }
+  .mono { font-variant-numeric: tabular-nums; }
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600; border: 1px solid var(--ring);
+  }
+  /* ── Dönemsel kutular ── */
+  .period .plabel { font-size: 12.5px; color: var(--ink-2); }
+  .period .pval {
+    font-size: 30px; font-weight: 640; letter-spacing: -0.02em;
+    line-height: 1.15; margin: 4px 0 2px;
+  }
+  .period .pbreak { font-size: 12px; color: var(--muted); }
+
+  /* ── Grafik ── */
+  .chart-head {
+    display: flex; flex-wrap: wrap; gap: 10px 20px;
+    align-items: flex-start; justify-content: space-between; margin-bottom: 16px;
+  }
+  .chart-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  /* Yatay yığılmış çubuk: parçalar 2px yüzey boşluğuyla ayrılır, çerçeveyle değil */
+  .stackbar { display: flex; gap: 2px; height: 22px; }
+  .stackbar > div {
+    height: 100%; min-width: 3px; position: relative;
+    transition: opacity .2s;
+  }
+  .stackbar > div:first-child { border-radius: 4px 0 0 4px; }
+  .stackbar > div:last-child  { border-radius: 0 4px 4px 0; }
+  .stackbar > div:only-child   { border-radius: 4px; }
+  .stackbar > div:hover { opacity: .82; }
+
+  /* Kaynak başına ayrı çubuk satırı. Çubuklar aynı ölçeği paylaşır:
+     genişlik toplam göstergeye oranlı, böylece kaynaklar arası
+     karşılaştırma tek bakışta yapılabilir. */
+  .srcrow {
+    display: grid; grid-template-columns: 116px 1fr 78px;
+    gap: 10px; align-items: center; margin-bottom: 7px;
+  }
+  .srcrow:last-child { margin-bottom: 0; }
+  .srcrow .srctrack { display: block; }
+  .srcrow .stackbar { height: 18px; }
+  .srcrow .hlabel { font-weight: 550; color: var(--ink); }
+
+  .chart-tools { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .toggle {
+    font: inherit; font-size: 12px; color: var(--ink-2);
+    background: var(--plane); border: 1px solid var(--ring);
+    border-radius: 7px; padding: 4px 10px; cursor: pointer;
+  }
+  .toggle:hover { color: var(--ink); }
+  .toggle[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+  .table-view { max-height: 260px; overflow-y: auto; }
+  .tswatch {
+    display: inline-block; width: 9px; height: 9px; border-radius: 2px;
+    margin-right: 7px; vertical-align: middle;
+  }
+  .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--ink-2); }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .chart-scroll { overflow-x: auto; }
+  /* Genişlik burada verilmezse SVG öntanımlı 300px'lik yer değiştirme
+     genişliğinde kalır, clientWidth yanlış okunur ve grafik panelin
+     yalnızca bir kısmını doldurur. min-width, dar ekranda küçülmek
+     yerine yatay kaydırma verir. */
+  #chart, #cumChart, #hourChart {
+    display: block; width: 100%; min-width: 560px;
+  }
+  #chart { height: 220px; }
+  .gridline { stroke: var(--hairline); stroke-width: 1; }
+  .axis-text { fill: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .hitbox { fill: transparent; cursor: pointer; }
+  .hitbox:hover + .colgroup rect, .colgroup.on rect { opacity: .82; }
+
+  .tip {
+    position: fixed; z-index: 20; pointer-events: none;
+    background: var(--surface); border: 1px solid var(--ring);
+    border-radius: 8px; padding: 9px 11px; font-size: 12.5px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.14); min-width: 150px;
+  }
+  .tip .tdate { font-weight: 620; margin-bottom: 5px; }
+  .tip .trow { display: flex; align-items: center; gap: 7px; justify-content: space-between; }
+  .tip .trow span { display: flex; align-items: center; gap: 6px; color: var(--ink-2); }
+  .tip .trow i { width: 8px; height: 8px; border-radius: 2px; }
+  .tip .trow b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tip .ttotal { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--hairline); }
+
+  /* ── Çalışma geçmişi tablosu ── */
+  table.runs th {
+    text-align: left; font-size: 11px; font-weight: 620; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 0 0 8px; border-bottom: 1px solid var(--hairline);
+  }
+  table.runs th.r, table.runs td.r { text-align: right; }
+  table.runs td { font-size: 13px; padding: 8px 0; color: var(--ink); font-weight: 450; }
+  table.runs td.r { font-variant-numeric: tabular-nums; }
+  table.runs td:first-child { color: var(--ink); }
+  table.runs td.empty { color: var(--muted); text-align: center; padding: 18px 0; }
+  .ok  { color: var(--good-text); font-weight: 600; }
+  .bad { color: var(--critical); font-weight: 600; }
+
+  footer {
+    margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--hairline);
+    font-size: 12px; color: var(--muted); display: flex;
+    flex-wrap: wrap; gap: 6px 18px; justify-content: space-between;
+  }
+  a { color: inherit; }
+  .err {
+    background: var(--surface); border: 1px solid var(--critical);
+    border-radius: 10px; padding: 13px 16px; margin-bottom: 18px;
+    font-size: 13.5px; color: var(--ink);
+  }
+  [hidden] { display: none !important; }
+
+  /* ── Tema seçici ── */
+  .seg { display: flex; border: 1px solid var(--ring); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    font: inherit; font-size: 12px; padding: 4px 9px; cursor: pointer;
+    background: var(--plane); color: var(--ink-2); border: 0;
+    border-right: 1px solid var(--ring);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+  .seg button:hover { color: var(--ink); }
+  .headtools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+  /* ── Gösterge arama ── */
+  .searchrow { display: flex; gap: 9px; flex-wrap: wrap; }
+  .searchrow input {
+    font: inherit; font-size: 14px; flex: 1 1 260px; min-width: 0;
+    padding: 9px 12px; border-radius: 8px; color: var(--ink);
+    background: var(--plane); border: 1px solid var(--ring);
+  }
+  .searchrow input:focus-visible { outline: 2px solid var(--s-ip); outline-offset: 1px; }
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 550; cursor: pointer;
+    padding: 9px 16px; border-radius: 8px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--ring);
+  }
+  .btn:hover { border-color: var(--ink-2); }
+  /* Silme yıkıcı ve geri alınması zor bir işlem; buton diğerlerine
+     benzememeli ki yanlışlıkla tıklanmasın. Satır içinde durduğu için
+     arama butonundan küçük. */
+  .btn-danger {
+    font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 3px 10px; border-radius: 7px; margin-left: auto; flex: none;
+    color: var(--critical); background: transparent;
+    border: 1px solid var(--critical); opacity: .72;
+  }
+  .btn-danger:hover { opacity: 1; background: color-mix(in srgb, var(--critical) 10%, transparent); }
+  .btn-danger[disabled] { opacity: .4; cursor: default; }
+  /* Arama satırındaki Sil: Sorgula ile aynı boyda ama kırmızı kenarlı —
+     yan yana dururken hangisinin yıkıcı olduğu bir bakışta anlaşılmalı. */
+  .btn-del { color: var(--critical); border-color: var(--critical); }
+  .btn-del:hover { border-color: var(--critical);
+                   background: color-mix(in srgb, var(--critical) 10%, transparent); }
+  .btn-del[disabled] { opacity: .45; cursor: default; }
+  .del-note {
+    font-size: 12px; color: var(--muted); padding: 0 0 9px;
+    display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap;
+  }
+  .del-note .ok { color: var(--good-text); font-weight: 600; }
+  .del-note .bad { font-size: 12px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 9px; }
+  .result { margin-top: 14px; }
+  .result .rline {
+    display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+    padding: 9px 0; border-bottom: 1px solid var(--hairline);
+  }
+  .result .rline:last-child { border-bottom: 0; }
+  .val { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+         font-size: 13px; word-break: break-all; }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 620; color: var(--ink);
+    border: 1px solid var(--ring); flex: none;
+  }
+  .badge i { width: 7px; height: 7px; border-radius: 2px;
+             display: inline-block; margin-right: 5px; }
+  .rmeta { font-size: 12px; color: var(--ink-2); margin-left: auto; text-align: right; }
+
+  /* ── Reddedilen göstergeler ──
+     Sebep adları uzun ("Kimlik doğrulama / yetki hatası"), bu yüzden
+     TLD listesindeki sabit etiket kolonu kullanılmıyor: ad + tip kırılımı
+     + sayı tek satırda, çubuk altında. Böylece etiket kırpılmıyor ve tip
+     kırılımının hangi sebebe ait olduğu belirsiz kalmıyor. */
+  .reason { margin-bottom: 13px; }
+  .reason:last-child { margin-bottom: 2px; }
+  .reason .rhead {
+    display: flex; align-items: baseline; gap: 9px;
+    font-size: 12.5px; margin-bottom: 5px;
+  }
+  .reason .rname { font-weight: 550; }
+  .reason .rtypes { font-size: 11.5px; color: var(--muted); }
+  .reason .rcount {
+    margin-left: auto; font-weight: 620; font-variant-numeric: tabular-nums;
+  }
+  .reason .htrack { display: block; height: 8px; border-radius: 4px; }
+
+  .reject-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--hairline);
+  }
+  .reject-row:last-child { border-bottom: 0; }
+  .reject-row .why { font-size: 12px; color: var(--ink-2); grid-column: 1 / -1; }
+  .clean {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 13.5px; color: var(--ink-2); padding: 6px 0;
+  }
+  .clean b { color: var(--good-text); }
+
+  /* ── Yatay çubuk listesi (TLD / subnet) ──
+     Etiket + çubuk + sayı aynı satırda: çubuk karşılaştırmayı, yanındaki
+     sayı kesin değeri veriyor. Böylece grafiğin ayrı bir tablo eşdeğerine
+     ihtiyacı kalmıyor. */
+  .hbars { display: grid; gap: 7px; }
+  .hbar { display: grid; grid-template-columns: 116px 1fr 62px; gap: 10px; align-items: center; }
+  .hbar .hlabel {
+    font-size: 12.5px; color: var(--ink-2); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Bilinçli olarak .hbar'a kapsanmadı: aynı çubuk hem burada hem red
+     panelinde kullanılıyor, yalnızca yükseklik bağlama göre değişiyor. */
+  .htrack { display: block; border-radius: 4px; }
+  .hfill { display: block; height: 100%; border-radius: 4px; min-width: 3px; }
+  .hbar .htrack { height: 14px; }
+  .hbar .hval { font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 550; }
+
+  /* ── Son eklenen göstergeler akışı ── */
+  .feed { max-height: 330px; overflow-y: auto; }
+  .feed .fitem {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--hairline);
+  }
+  .feed .fitem:last-child { border-bottom: 0; }
+  .feed .fitem .val { flex: 1 1 auto; min-width: 0; }
+  .feed .ftime { font-size: 11.5px; color: var(--muted); flex: none;
+                 font-variant-numeric: tabular-nums; }
+  .dotpush { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+  /* ── Mimari diyagramı ──
+     Renkler CSS değişkenlerinden geliyor, böylece tema değiştiğinde
+     diyagram da birlikte değişiyor; ayrı bir koyu mod görseli gerekmiyor. */
+  .diagram-scroll { overflow-x: auto; }
+  /* Diyagram küçülürken metin de küçülüyor; 900px altında okunamaz hâle
+     geldiği için o noktadan sonra kaydırma tercih edildi. */
+  #arch { display: block; width: 100%; min-width: 900px; height: auto; }
+  #arch .box { fill: var(--plane); stroke: var(--ring); stroke-width: 1; }
+  #arch .lbl { fill: var(--ink); font-size: 12.5px; font-weight: 600; }
+  #arch .sub { fill: var(--muted); font-size: 10.5px; }
+  #arch .flow { stroke: var(--ink-2); stroke-width: 1.5; fill: none; }
+  #arch .flow-dash { stroke-dasharray: 4 3; }
+  #arch .flowlbl { fill: var(--ink-2); font-size: 10.5px; }
+  #arch .grouplbl { fill: var(--muted); font-size: 10px; font-weight: 620;
+                    letter-spacing: .06em; }
+  #arch .group { fill: none; stroke: var(--hairline); stroke-width: 1;
+                 stroke-dasharray: 3 3; }
+  .legend-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+  .exports { display: flex; gap: 8px; flex-wrap: wrap; }
+  .exports a {
+    font-size: 12px; text-decoration: none; padding: 5px 11px;
+    border: 1px solid var(--ring); border-radius: 7px;
+    background: var(--surface); color: var(--ink-2);
+  }
+  .exports a:hover { color: var(--ink); border-color: var(--ink-2); }
+
+  @media (max-width: 860px) {
+    .kpis, .grid2 { grid-template-columns: 1fr; }
+    .hero .value { font-size: 44px; }
+  }
+  @media (max-width: 560px) {
+    body { padding: 16px 13px 40px; }
+    header { gap: 10px; }
+    h1 { font-size: 17px; }
+    .hero { padding: 20px 16px; }
+    .hero .value { font-size: 38px; }
+    .panel, .tile { padding: 14px; }
+    /* Dar ekranda üç sütunluk çubuk satırı sıkışıyor: etiket üste alınır */
+    .hbar { grid-template-columns: 1fr 62px; }
+    .hbar .hlabel { grid-column: 1 / -1; }
+    .rmeta { margin-left: 0; text-align: left; width: 100%; }
+    footer { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<script>
+/* Tema tercihi ilk boyamadan ÖNCE uygulanmalı: sayfanın altındaki script
+   çalışana kadar bekleseydi, koyu mod seçmiş bir kullanıcı her yenilemede
+   bir kare boyunca açık temayı görürdü. */
+(function () {
+  try {
+    var t = localStorage.getItem('usom-theme');
+    if (t === 'light' || t === 'dark') {
+      document.documentElement.setAttribute('data-theme', t);
+    }
+  } catch (e) { /* localStorage kapalı olabilir — otomatik modda kal */ }
+})();
+</script>
+<div class="wrap">
+
+  <header>
+    <div class="brandrow">
+      <div>
+        <h1>{{SERVICE_TITLE}}</h1>
+        <div class="sub">Tehdit istihbaratı besleme ve CrowdStrike entegrasyon panosu</div>
+      </div>
+    </div>
+    <div class="headtools">
+      <div class="seg" role="group" aria-label="Tema seçimi">
+        <button type="button" data-theme-set="auto"  aria-pressed="true">Otomatik</button>
+        <button type="button" data-theme-set="light" aria-pressed="false">Açık</button>
+        <button type="button" data-theme-set="dark"  aria-pressed="false">Koyu</button>
+      </div>
+      <div class="live">
+        <span class="pulse" id="pulse"></span>
+        <span id="updated">yükleniyor…</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="err" id="error" hidden></div>
+
+  <div class="banner" id="banner">
+    <span class="dot" id="statusDot"></span>
+    <strong id="statusText">—</strong>
+    <span class="why" id="statusWhy"></span>
+  </div>
+
+  <div class="hero">
+    <div class="label">CrowdStrike'a işlenen toplam gösterge</div>
+    <div class="value" id="heroValue">—</div>
+    <div class="note" id="heroNote">&nbsp;</div>
+  </div>
+
+  <div class="kpis">
+    <div class="tile">
+      <div class="head">
+        <span class="swatch" style="background:var(--s-ip)"></span>
+        <span class="name">Zararlı IP</span>
+        <span class="src">USOM</span>
+      </div>
+      <div class="big" id="ipTotal">—</div>
+      <div class="cap">veritabanındaki kayıt</div>
+      <div class="meter" style="background:var(--track-ip)">
+        <i id="ipBar" style="background:var(--s-ip); width:0%"></i>
+      </div>
+      <div class="mrow"><span>gönderildi <b id="ipPushed">—</b></span><span>bekleyen <b id="ipPending">—</b></span></div>
+      <div class="mrow blocked-row" id="ipBlockedRow" hidden><span>bloke <b id="ipBlocked">—</b></span></div>
+    </div>
+
+    <div class="tile">
+      <div class="head">
+        <span class="swatch" style="background:var(--s-domain)"></span>
+        <span class="name">Zararlı Domain</span>
+        <span class="src">USOM</span>
+      </div>
+      <div class="big" id="dmTotal">—</div>
+      <div class="cap">veritabanındaki kayıt</div>
+      <div class="meter" style="background:var(--track-domain)">
+        <i id="dmBar" style="background:var(--s-domain); width:0%"></i>
+      </div>
+      <div class="mrow"><span>gönderildi <b id="dmPushed">—</b></span><span>bekleyen <b id="dmPending">—</b></span></div>
+      <div class="mrow blocked-row" id="dmBlockedRow" hidden><span>bloke <b id="dmBlocked">—</b></span></div>
+    </div>
+
+    <div class="tile">
+      <div class="head">
+        <span class="swatch" style="background:var(--s-hash)"></span>
+        <span class="name">Zararlı Yazılım Hash</span>
+        <span class="src">MalwareBazaar</span>
+      </div>
+      <div class="big" id="hsTotal">—</div>
+      <div class="cap">veritabanındaki kayıt</div>
+      <div class="meter" style="background:var(--track-hash)">
+        <i id="hsBar" style="background:var(--s-hash); width:0%"></i>
+      </div>
+      <div class="mrow"><span>gönderildi <b id="hsPushed">—</b></span><span>bekleyen <b id="hsPending">—</b></span></div>
+      <div class="mrow blocked-row" id="hsBlockedRow" hidden><span>bloke <b id="hsBlocked">—</b></span></div>
+    </div>
+  </div>
+
+  <!-- ── Gösterge sorgulama ──
+       Toplamlar "liste ne kadar büyük" sorusunu cevaplıyor; operatörün
+       eline gelen soru ise genellikle tek bir değerle ilgili: "şu adres
+       listede mi, engellendi mi?" 400 binlik beslemeyi indirip aramak
+       yerine burada tek sorguyla cevaplanır. -->
+  <div class="panel" style="margin-bottom:18px">
+    <h2>Gösterge sorgulama</h2>
+    <form class="searchrow" id="searchForm" autocomplete="off">
+      <input id="q" name="q" type="search" maxlength="260" spellcheck="false"
+             placeholder="IP, alan adı, sha256 veya md5 değeri"
+             aria-label="Aranacak gösterge değeri">
+      <button type="submit" class="btn">Sorgula</button>
+      <!-- Kutudaki değeri doğrudan siler. Satır içindeki Sil butonları
+           da duruyor; bir sorgu birden fazla tipte eşleştiğinde (aynı
+           değer hem domain hem hash olabilir) hangisinin silineceğini
+           seçmek yalnızca oradan mümkün. Buradaki buton eşleşen tüm
+           tipleri siler ve ne sileceğini onay kutusunda sayar. -->
+      <button type="button" class="btn btn-del" id="deleteBtn">Sil</button>
+    </form>
+    <div class="hint" id="searchHint">
+      Değer veritabanında var mı, ne zaman eklendi, CrowdStrike'a gönderildi mi —
+      gönderilmediyse sebebi. <b>Sil</b> göstergeyi CrowdStrike'tan ve
+      veritabanından kaldırır, senkronizasyonda geri gelmemesi için kalıcı
+      dışlama listesine alır.
+    </div>
+    <div class="result" id="searchResult" hidden></div>
+  </div>
+
+  <!-- ── Dönemsel yeni gösterge ── -->
+  <div class="kpis" style="margin-bottom:18px">
+    <div class="tile period"><div class="plabel">Son 24 saat</div><div class="pval" id="p24">—</div><div class="pbreak" id="p24b">&nbsp;</div></div>
+    <div class="tile period"><div class="plabel">Son 7 gün</div><div class="pval" id="p7">—</div><div class="pbreak" id="p7b">&nbsp;</div></div>
+    <div class="tile period"><div class="plabel">Son 30 gün</div><div class="pval" id="p30">—</div><div class="pbreak" id="p30b">&nbsp;</div></div>
+  </div>
+
+  <!-- ── Gönderilemeyen göstergeler ──
+       "Bekleyen 9.520" satırı iki farklı durumu aynı sayıda topluyor:
+       sırası gelmemiş göstergeler ve gönderilmeye çalışılıp reddedilenler.
+       Aksiyon gerektiren ikinci grup; bu panel onu ayırır ve sebebini
+       söyler. Kalıcı bir red (uzunluk sınırı) beklenen bir durumken,
+       yetki hatası derhal müdahale gerektirir. -->
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="panel">
+      <div class="chart-head">
+        <h2 style="margin:0">Gönderilemeyen göstergeler</h2>
+        <div class="chart-note" id="rejNote">&nbsp;</div>
+      </div>
+      <div id="rejReasons"></div>
+      <div class="table-view" id="rejList" style="max-height:200px; margin-top:12px"></div>
+      <!-- Bloke listesi redlerden AYRI: "reddedildi" bir olay (dönen kayıt
+           defteri), "bloke" kalıcı bir durum. Aksiyon gerektiren liste bu. -->
+      <div id="blockedBox" hidden>
+        <h2 style="margin:16px 0 10px">Gönderim dışı bırakılanlar</h2>
+        <div class="chart-note" id="blockedNote">&nbsp;</div>
+        <div class="table-view" id="blockedList" style="max-height:240px; margin-top:10px"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="chart-head">
+        <h2 style="margin:0">Son görev hataları</h2>
+        <div class="chart-note" id="failNote">&nbsp;</div>
+      </div>
+      <div id="failList"></div>
+    </div>
+  </div>
+
+  <!-- ── Kaynak bazında dağılım ── -->
+  <div class="panel" style="margin-bottom:18px">
+    <div class="chart-head">
+      <div>
+        <h2 style="margin:0">Kaynak bazında dağılım</h2>
+        <div class="chart-note" id="srcNote">&nbsp;</div>
+      </div>
+    </div>
+    <div id="srcBar"></div>
+    <div class="legend" style="margin-top:12px">
+      <span><i style="background:var(--s-ip)"></i>IP</span>
+      <span><i style="background:var(--s-domain)"></i>Domain</span>
+      <span><i style="background:var(--s-hash)"></i>Hash</span>
+    </div>
+    <table class="runs" style="margin-top:14px">
+      <thead>
+        <tr><th>Kaynak</th><th>Gösterge tipi</th><th class="r">Kayıt</th><th class="r">Pay</th></tr>
+      </thead>
+      <tbody id="srcBody"></tbody>
+    </table>
+  </div>
+
+  <!-- ── Günlük yeni gösterge grafiği ── -->
+  <div class="panel" style="margin-bottom:18px">
+    <div class="chart-head">
+      <div>
+        <h2 style="margin:0">Günlük yeni gösterge — son 30 gün</h2>
+        <div class="chart-note" id="chartNote">&nbsp;</div>
+      </div>
+      <div class="chart-tools">
+        <div class="legend">
+          <span><i style="background:var(--s-ip)"></i>IP</span>
+          <span><i style="background:var(--s-domain)"></i>Domain</span>
+          <span><i style="background:var(--s-hash)"></i>Hash</span>
+        </div>
+        <button type="button" id="viewToggle" class="toggle" aria-pressed="false">Tablo görünümü</button>
+      </div>
+    </div>
+    <div class="chart-scroll" id="chartView">
+      <svg id="chart" role="img" aria-label="Son 30 günde eklenen yeni gösterge sayısı, türe göre yığılmış sütun grafiği"></svg>
+    </div>
+    <div class="table-view" id="tableView" hidden>
+      <table class="runs">
+        <thead>
+          <tr><th>Tarih</th><th class="r">IP</th><th class="r">Domain</th><th class="r">Hash</th><th class="r">Toplam</th></tr>
+        </thead>
+        <tbody id="dailyBody"></tbody>
+      </table>
+    </div>
+    <div class="tip" id="tip" hidden></div>
+  </div>
+
+  <!-- ── Kümülatif büyüme ──
+       Günlük çubuklar "bugün ne geldi" sorusunu cevaplıyor ama sıfır olan
+       bir gün grafiği kesintiye uğramış gibi gösteriyor ve listenin gerçek
+       boyutunu gizliyor. Kümülatif eğri birikimi verir; pencere
+       başlangıcından önceki kayıtlar taban olarak eklendiği için eğri
+       sıfırdan değil, veritabanının o günkü gerçek boyutundan başlar. -->
+  <div class="panel" style="margin-bottom:18px">
+    <div class="chart-head">
+      <div>
+        <h2 style="margin:0">Kümülatif büyüme — son 30 gün</h2>
+        <div class="chart-note" id="cumNote">&nbsp;</div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--s-ip)"></i>IP</span>
+        <span><i style="background:var(--s-domain)"></i>Domain</span>
+        <span><i style="background:var(--s-hash)"></i>Hash</span>
+      </div>
+    </div>
+    <div class="chart-scroll">
+      <svg id="cumChart" role="img"
+           aria-label="Son 30 günde veritabanındaki toplam gösterge sayısının türe göre değişimi, çizgi grafiği"></svg>
+    </div>
+  </div>
+
+  <!-- ── Dağılımlar ──
+       İkisi de parça-bütün değil sıralama sorusu: hangi uzantı / hangi
+       blok yoğun. Yatay çubuk uzun etiketleri kesmeden gösterir, yanındaki
+       sayı kesin değeri verir. -->
+  <div class="grid2" style="margin-bottom:18px">
+    <div class="panel">
+      <div class="chart-head">
+        <div>
+          <h2 style="margin:0">En yoğun alan adı uzantıları</h2>
+          <div class="chart-note" id="tldNote">&nbsp;</div>
+        </div>
+      </div>
+      <div class="hbars" id="tldBars"></div>
+    </div>
+
+    <div class="panel">
+      <div class="chart-head">
+        <div>
+          <h2 style="margin:0">En yoğun /16 IP blokları</h2>
+          <div class="chart-note" id="subNote">&nbsp;</div>
+        </div>
+      </div>
+      <div class="hbars" id="subBars"></div>
+    </div>
+  </div>
+
+  <!-- ── Saat dağılımı ── -->
+  <div class="panel" style="margin-bottom:18px">
+    <div class="chart-head">
+      <div>
+        <h2 style="margin:0">Gösterge eklenme saatleri — son 7 gün</h2>
+        <div class="chart-note" id="hourNote">&nbsp;</div>
+      </div>
+      <div class="chart-tools">
+        <div class="legend">
+          <span><i style="background:var(--s-ip)"></i>IP</span>
+          <span><i style="background:var(--s-domain)"></i>Domain</span>
+          <span><i style="background:var(--s-hash)"></i>Hash</span>
+        </div>
+        <button type="button" id="hourToggle" class="toggle" aria-pressed="false">Tablo görünümü</button>
+      </div>
+    </div>
+    <div class="chart-scroll" id="hourView">
+      <svg id="hourChart" role="img"
+           aria-label="Göstergelerin günün hangi saatinde eklendiğini türe göre gösteren yığılmış sütun grafiği"></svg>
+    </div>
+    <div class="table-view" id="hourTableView" hidden>
+      <table class="runs">
+        <thead>
+          <tr><th>Saat</th><th class="r">IP</th><th class="r">Domain</th><th class="r">Hash</th><th class="r">Toplam</th></tr>
+        </thead>
+        <tbody id="hourBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Senkronizasyon</h2>
+      <table>
+        <tr><td>Son başarılı senkronizasyon</td><td id="lastSync">—</td></tr>
+        <tr><td>Son yeni kayıt geldiği an</td><td id="lastData">—</td></tr>
+        <tr><td>Sıradaki senkronizasyon</td><td id="nextSync">—</td></tr>
+        <tr><td>Zamanlayıcı</td><td id="schedState">—</td></tr>
+        <tr><td>Servis çalışma süresi</td><td id="uptime">—</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>CrowdStrike Falcon</h2>
+      <table>
+        <tr><td>Bağlantı</td><td id="csConn">—</td></tr>
+        <tr><td>IP / Domain aksiyonu</td><td id="csNet">—</td></tr>
+        <tr><td>Hash aksiyonu</td><td id="csHash">—</td></tr>
+        <tr><td>Son gönderim</td><td id="csLast">—</td></tr>
+        <tr><td>Bu oturumda gönderilen</td><td id="csSession">—</td></tr>
+        <tr><td>Gönderim</td><td id="csPush">—</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Saklama politikası ──
+       CrowdStrike tenant başına 1 milyon gösterge kabul ediyor. Sınır
+       dolduğunda YENİ gösterge yazılamaz, yani en güncel tehditler EDR'a
+       hiç ulaşmaz. Bu bölüm "ne kadar yer kaldı ve bir sonraki temizlik
+       ne zaman" sorusunu tek bakışta cevaplar. -->
+  <div class="panel" style="margin-top:14px">
+    <div class="chart-head">
+      <h2 style="margin:0">Saklama politikası</h2>
+      <div class="chart-note" id="retNote">&nbsp;</div>
+    </div>
+    <table>
+      <tr><td>Politika</td><td id="retPolicy">—</td></tr>
+      <tr><td>Süresi dolmuş (şu an)</td><td id="retExpired">—</td></tr>
+      <tr><td>Tur başına üst sınır</td><td id="retCap">—</td></tr>
+      <tr><td>Son temizlik</td><td id="retLast">—</td></tr>
+    </table>
+    <div class="hint">
+      Süresi dolan göstergeler her gün 02:30'da CrowdStrike'tan ve
+      veritabanından kaldırılır, böylece yeni tehditlere yer açılır.
+      Süresi dolan bir gösterge kaynak tarafından yeniden raporlanırsa
+      normal yoluyla geri gelir — kalıcı olarak dışlanmaz.
+    </div>
+  </div>
+
+  <!-- ── Son çalışmalar ── -->
+  <div class="panel" style="margin-top:14px">
+    <div class="chart-head">
+      <h2 style="margin:0">Son senkronizasyon çalışmaları</h2>
+      <div class="chart-note" id="relNote">&nbsp;</div>
+    </div>
+    <table class="runs">
+      <thead>
+        <tr><th>Görev</th><th>Başlangıç</th><th class="r">Yeni kayıt</th><th class="r">Gönderilen</th><th class="r">Süre</th><th class="r">Sonuç</th></tr>
+      </thead>
+      <tbody id="runsBody">
+        <tr><td colspan="6" class="empty">Henüz kayıtlı çalışma yok — ilk zamanlanmış görevden sonra burada listelenecek.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Son eklenen göstergeler ──
+       Sayaçlar arttığını gösteriyor ama neyin geldiğini göstermiyor.
+       Ham akışı görmek, beslemenin gerçekten anlamlı veri getirdiğini
+       doğrulamanın en hızlı yolu. -->
+  <div class="panel" style="margin-top:14px">
+    <div class="chart-head">
+      <div>
+        <h2 style="margin:0">Son eklenen göstergeler</h2>
+        <div class="chart-note" id="feedNote">&nbsp;</div>
+      </div>
+      <div class="chart-tools">
+        <div class="seg" role="group" aria-label="Gösterge tipi filtresi">
+          <button type="button" data-feed="all"    aria-pressed="true">Tümü</button>
+          <button type="button" data-feed="ip"     aria-pressed="false">IP</button>
+          <button type="button" data-feed="domain" aria-pressed="false">Domain</button>
+          <button type="button" data-feed="hash"   aria-pressed="false">Hash</button>
+        </div>
+      </div>
+    </div>
+    <div class="feed" id="feedList"></div>
+    <div class="legend-note">
+      Sağdaki nokta gönderim durumunu gösterir:
+      <span class="dotpush" style="background:var(--good); display:inline-block; vertical-align:middle"></span>
+      gönderildi ·
+      <span class="dotpush" style="background:var(--muted); display:inline-block; vertical-align:middle"></span>
+      kuyrukta.
+    </div>
+  </div>
+
+  <!-- ── Sistem nasıl çalışıyor ──
+       Diyagram elle yazılmış inline SVG: harici bir çizim kütüphanesi
+       (mermaid vb.) iç ağda yüklenemeyebilir ve panonun tek dosyalık,
+       bağımlılıksız yapısını bozar. Renkler tema değişkenlerinden
+       geldiği için açık/koyu modda ayrı görsel gerekmiyor. -->
+  <div class="panel" style="margin-top:14px">
+    <div class="chart-head">
+      <div>
+        <h2 style="margin:0">Sistem nasıl çalışıyor</h2>
+        <div class="chart-note">
+          Kaynaktan güvenlik cihazına kadar veri akışı — kesikli oklar
+          zamanlanmış görevlerle tetiklenen adımları gösterir.
+        </div>
+      </div>
+    </div>
+    <div class="diagram-scroll">
+      <svg id="arch" viewBox="0 0 980 470" role="img"
+           aria-label="Sistem mimarisi: USOM, abuse.ch MalwareBazaar ve Brandefense kaynaklarından çekilen göstergeler zamanlanmış senkronizasyon görevleriyle tek bir SQLite veritabanına yazılır. Gönderim filtreleri imzasız hash'leri, sistem ikilisi adı taşıyan dosyaları ve whitelist kayıtlarını ayıklar. Kalanlar CrowdStrike Falcon'a IOC olarak gönderilir; ayrıca güvenlik cihazlarının okuduğu plain-text beslemeler ve bu pano tarafından sunulur. CrowdStrike'ın reddettiği göstergeler sebebiyle birlikte veritabanına geri yazılır.">
+
+        <!-- ── 1. Kaynaklar ──
+             Üç besleme, üçü de aynı veritabanına yazıyor. Renkli sol şerit
+             kaynağın hangi gösterge tipini sağladığını belli ediyor. -->
+        <rect class="group" x="8"   y="30"  width="196" height="250" rx="10"/>
+        <text class="grouplbl" x="18" y="50">1 · DIŞ KAYNAKLAR</text>
+
+        <rect class="box" x="24" y="66" width="164" height="62" rx="8"/>
+        <rect x="24" y="66" width="4" height="62" rx="2" fill="var(--s-ip)"/>
+        <text class="lbl" x="40" y="90">USOM API</text>
+        <text class="sub" x="40" y="107">siberguvenlik.gov.tr</text>
+        <text class="sub" x="40" y="121">zararlı IP + alan adı</text>
+
+        <rect class="box" x="24" y="140" width="164" height="62" rx="8"/>
+        <rect x="24" y="140" width="4" height="62" rx="2" fill="var(--s-hash)"/>
+        <text class="lbl" x="40" y="164">MalwareBazaar</text>
+        <text class="sub" x="40" y="181">abuse.ch CSV dökümü</text>
+        <text class="sub" x="40" y="195">sha256 · md5 · imza</text>
+
+        <rect class="box" x="24" y="214" width="164" height="62" rx="8"/>
+        <rect x="24" y="214" width="4" height="62" rx="2" fill="var(--s-domain)"/>
+        <text class="lbl" x="40" y="238">Brandefense</text>
+        <text class="sub" x="40" y="255">api.brandefense.io · Bearer</text>
+        <text class="sub" x="40" y="269">IPv4 · alan adı (phishing)</text>
+
+        <!-- ── 2. Senkronizasyon ── -->
+        <rect class="group" x="256" y="30" width="196" height="250" rx="10"/>
+        <text class="grouplbl" x="266" y="50">2 · SENKRONİZASYON</text>
+
+        <rect class="box" x="272" y="66" width="164" height="210" rx="8"/>
+        <text class="lbl" x="288" y="88">Zamanlanmış görevler</text>
+        <text class="sub" x="288" y="106">IP :05 · domain :10</text>
+        <text class="sub" x="288" y="120">hash :15 · Brandefense :30</text>
+        <text class="sub" x="288" y="134">tam sync · Pazar 03:00/04:00</text>
+        <text class="sub" x="288" y="156">httpx + tenacity yeniden</text>
+        <text class="sub" x="288" y="170">deneme; Brandefense'te</text>
+        <text class="sub" x="288" y="184">cursor sayfalama, yeni</text>
+        <text class="sub" x="288" y="198">kayıt bitince durur</text>
+        <text class="lbl" x="288" y="222" style="font-size:11px">GÖNDERİM FİLTRELERİ</text>
+        <text class="sub" x="288" y="238">whitelist · paylaşımlı altyapı</text>
+        <text class="sub" x="288" y="252">imzasız hash gönderilmez</text>
+        <text class="sub" x="288" y="266">sistem ikilisi adı gönderilmez</text>
+
+        <!-- ── 3. Kalıcılık ── -->
+        <rect class="group" x="504" y="30" width="196" height="250" rx="10"/>
+        <text class="grouplbl" x="514" y="50">3 · KALICILIK</text>
+
+        <rect class="box" x="520" y="66" width="164" height="210" rx="8"/>
+        <text class="lbl" x="536" y="88">SQLite (WAL)</text>
+        <text class="sub" x="536" y="106">malicious_ips</text>
+        <text class="sub" x="536" y="120">malicious_domains</text>
+        <text class="sub" x="536" y="134">malicious_hashes</text>
+        <text class="sub" x="536" y="156">source · signature</text>
+        <text class="sub" x="536" y="170">file_name · push_blocked</text>
+        <text class="sub" x="536" y="184">sync_runs · push_rejections</text>
+        <text class="sub" x="536" y="206">birincil anahtar duplicate'i</text>
+        <text class="sub" x="536" y="220">engeller: aynı gösterge iki</text>
+        <text class="sub" x="536" y="234">kaynaktan gelse tek satır,</text>
+        <text class="sub" x="536" y="248">tek gönderim</text>
+
+        <!-- ── 4. Tüketiciler ── -->
+        <rect class="group" x="752" y="30" width="220" height="360" rx="10"/>
+        <text class="grouplbl" x="762" y="50">4 · TÜKETİCİLER</text>
+
+        <rect class="box" x="768" y="66" width="188" height="76" rx="8"/>
+        <rect x="768" y="66" width="4" height="76" rx="2" fill="var(--critical)"/>
+        <text class="lbl" x="784" y="90">CrowdStrike Falcon</text>
+        <text class="sub" x="784" y="107">IOC · 200'lük batch</text>
+        <text class="sub" x="784" y="121">IP/domain → detect</text>
+        <text class="sub" x="784" y="135">hash → prevent</text>
+
+        <rect class="box" x="768" y="160" width="188" height="90" rx="8"/>
+        <rect x="768" y="160" width="4" height="90" rx="2" fill="var(--s-domain)"/>
+        <text class="lbl" x="784" y="184">Güvenlik cihazları</text>
+        <text class="sub" x="784" y="201">/usom-ips</text>
+        <text class="sub" x="784" y="215">/usom-domains</text>
+        <text class="sub" x="784" y="229">/malware-hashes</text>
+        <text class="sub" x="784" y="243">plain-text, satır satır</text>
+
+        <rect class="box" x="768" y="268" width="188" height="90" rx="8"/>
+        <rect x="768" y="268" width="4" height="90" rx="2" fill="var(--s-ip)"/>
+        <text class="lbl" x="784" y="292">Bu pano</text>
+        <text class="sub" x="784" y="309">/health · /stats</text>
+        <text class="sub" x="784" y="323">/lookup · /recent</text>
+        <text class="sub" x="784" y="337">/export/*.csv</text>
+        <text class="sub" x="784" y="351">/events (SSE canlı akış)</text>
+
+        <!-- ── Akış okları ── -->
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/>
+          </marker>
+        </defs>
+
+        <!-- üç kaynak → sync (kesikli: zamanlayıcı tetikler) -->
+        <path class="flow flow-dash" d="M188,97 L272,110"  marker-end="url(#ah)"/>
+        <path class="flow flow-dash" d="M188,171 L272,165" marker-end="url(#ah)"/>
+        <path class="flow flow-dash" d="M188,245 L272,220" marker-end="url(#ah)"/>
+        <text class="flowlbl" x="196" y="135">HTTPS</text>
+        <text class="flowlbl" x="196" y="147">çekim</text>
+
+        <!-- sync → db -->
+        <path class="flow" d="M436,171 L520,171" marker-end="url(#ah)"/>
+        <text class="flowlbl" x="452" y="164">yaz</text>
+
+        <!-- db → crowdstrike (kesikli: gönderilmemiş kuyruk görevle basılır) -->
+        <path class="flow flow-dash" d="M684,92 L768,92" marker-end="url(#ah)"/>
+        <text class="flowlbl" x="702" y="86">push</text>
+
+        <!-- crowdstrike → db: reddedilen göstergeler sebebiyle geri yazılır.
+             Ok SOLA bakar; geri besleme akışın tersine gittiği için. -->
+        <path class="flow flow-dash" d="M768,124 L684,124" marker-end="url(#ah)"/>
+        <text class="flowlbl" x="694" y="118">red kaydı</text>
+
+        <!-- db → besleme uçları -->
+        <path class="flow" d="M684,170 L730,170 L730,196 L768,196" marker-end="url(#ah)"/>
+        <text class="flowlbl" x="694" y="164">oku</text>
+
+        <!-- db → pano -->
+        <path class="flow" d="M684,230 L708,230 L708,300 L768,300" marker-end="url(#ah)"/>
+
+        <!-- ── Alt şerit: gözlemlenebilirlik döngüsü ── -->
+        <rect class="group" x="8" y="306" width="692" height="142" rx="10"/>
+        <text class="grouplbl" x="18" y="326">GÖZLEMLENEBİLİRLİK DÖNGÜSÜ</text>
+
+        <rect class="box" x="24" y="342" width="200" height="88" rx="8"/>
+        <text class="lbl" x="40" y="366">Çalışma geçmişi</text>
+        <text class="sub" x="40" y="383">her görev sync_runs'a</text>
+        <text class="sub" x="40" y="397">süre + sonuç yazar</text>
+        <text class="sub" x="40" y="418">hata mesajı saklanır</text>
+
+        <rect class="box" x="256" y="342" width="200" height="88" rx="8"/>
+        <text class="lbl" x="272" y="366">Red ve bloke kaydı</text>
+        <text class="sub" x="272" y="383">gönderilemeyen gösterge</text>
+        <text class="sub" x="272" y="397">sebebiyle tutulur; kalıcı</text>
+        <text class="sub" x="272" y="418">redler kuyruktan düşer</text>
+
+        <rect class="box" x="488" y="342" width="200" height="88" rx="8"/>
+        <text class="lbl" x="504" y="366">Tazelik kontrolü</text>
+        <text class="sub" x="504" y="383">son BAŞARILI sync damgası</text>
+        <text class="sub" x="504" y="397">2 saati aşarsa /health</text>
+        <text class="sub" x="504" y="418">"degraded" döner</text>
+
+        <path class="flow" d="M224,386 L256,386" marker-end="url(#ah)"/>
+        <path class="flow" d="M456,386 L488,386" marker-end="url(#ah)"/>
+        <!-- gözlemlenebilirlik → pano: bu panelin okuduğu veri buradan gelir -->
+        <path class="flow" d="M688,386 L742,386 L742,336 L768,336" marker-end="url(#ah)"/>
+      </svg>
+    </div>
+    <div class="legend-note">
+      Kritik davranış: bir gösterge CrowdStrike'ta <b>zaten kayıtlıysa</b> da
+      veritabanında "gönderildi" işaretlenir. Aksi hâlde her turda tekrar denenir
+      ve tek bir duplicate satır 200'lük batch'in tamamını 400 ile geri döndürür.
+      <br>
+      Hash aksiyonu <b>prevent</b> olduğu için — yani gönderilen bir hash'in
+      çalıştırılması kurum genelinde engellendiği için — MalwareBazaar
+      kaydında zararlı yazılım ailesi belirtilmemiş örnekler ve dosya adı
+      yaygın bir sistem ikilisi olan kayıtlar hiç gönderilmez. Bunlar
+      veritabanında arşivlenir, "gönderim dışı" olarak işaretlenir ve
+      yukarıdaki panelde sebebiyle listelenir.
+      <br>
+      Brandefense'ten yalnızca alan adı ve IPv4 alınır: hash beslemesinin
+      %99'u zaten doğrudan çektiğimiz MalwareBazaar'ın MD5 kopyasıdır ve
+      imza alanı taşımadığı için yukarıdaki filtre ona uygulanamaz.
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h2>Otomatik görev takvimi</h2>
+    <table>
+      <tr><td>IP delta senkronizasyonu</td><td class="mono">her saat :05</td></tr>
+      <tr><td>Domain delta senkronizasyonu</td><td class="mono">her saat :10</td></tr>
+      <tr><td>Hash senkronizasyonu (MalwareBazaar)</td><td class="mono">her saat :15</td></tr>
+      <tr><td>IOC senkronizasyonu (Brandefense)</td><td class="mono">her saat :30</td></tr>
+      <tr><td>IP tam senkronizasyonu</td><td class="mono">Pazar 03:00</td></tr>
+      <tr><td>Domain tam senkronizasyonu</td><td class="mono">Pazar 04:00</td></tr>
+    </table>
+  </div>
+
+  <!-- ── Dışa aktarım ──
+       Plain-text beslemeler güvenlik cihazları için yalnızca değer listesi
+       döndürüyor. Analistin ihtiyacı olan "ne zaman geldi, gönderildi mi"
+       sütunları CSV'de var. -->
+  <div class="panel" style="margin-top:14px">
+    <h2>Dışa aktarım</h2>
+    <div class="exports">
+      <a href="/export/ip.csv" download>IP listesi (CSV)</a>
+      <a href="/export/domain.csv" download>Alan adı listesi (CSV)</a>
+      <a href="/export/hash.csv" download>Hash listesi (CSV)</a>
+      <a href="/stats" target="_blank" rel="noopener">İstatistikler (JSON)</a>
+      <a href="/stats/distribution" target="_blank" rel="noopener">Dağılımlar (JSON)</a>
+    </div>
+    <div class="hint">
+      CSV dosyaları eklenme tarihi ve CrowdStrike gönderim durumunu da içerir;
+      plain-text beslemeler yalnızca gösterge değerini döndürür.
+    </div>
+  </div>
+
+  <footer>
+    <span>Kaynaklar: Siber Güvenlik Başkanlığı (USOM) · abuse.ch MalwareBazaar · Brandefense</span>
+    <span>Beslemeler:
+      <a href="/usom-ips">/usom-ips</a> ·
+      <a href="/usom-domains">/usom-domains</a> ·
+      <a href="/malware-hashes">/malware-hashes</a> ·
+      <a href="/health">/health</a> ·
+      <a href="/docs">/docs</a>
+    </span>
+  </footer>
+</div>
+
+<script>
+const REFRESH_MS = 15000;
+const nf = new Intl.NumberFormat('tr-TR');
+
+const $ = id => document.getElementById(id);
+const num = v => (typeof v === 'number' ? nf.format(v) : '—');
+
+/* Gösterge değerleri dış kaynaktan geliyor ve HTML olarak yazılıyor.
+   USOM/MalwareBazaar bugün zararsız karakterler döndürüyor olsa da
+   beslemeden gelen bir değerin işaretlemeye karışmasına izin verilmemeli. */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[ch]);
+}
+
+const TYPE_LABEL = { ip: 'IP', domain: 'Domain', hash: 'Hash' };
+const TYPE_COLOR = { ip: '--s-ip', domain: '--s-domain', hash: '--s-hash' };
+
+function typeBadge(type) {
+  return '<span class="badge"><i style="background:var(' + (TYPE_COLOR[type] || '--s-ip')
+    + ')"></i>' + esc(TYPE_LABEL[type] || type) + '</span>';
+}
+
+function pct(pushed, total) {
+  if (!total || total <= 0) return 0;
+  return Math.min(100, Math.max(0, (pushed / total) * 100));
+}
+
+function humanAge(sec) {
+  if (sec == null) return '—';
+  if (sec < 60) return sec + ' saniye önce';
+  const m = Math.floor(sec / 60);
+  if (m < 60) return m + ' dakika önce';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' saat ' + (m % 60) + ' dakika önce';
+  return Math.floor(h / 24) + ' gün ' + (h % 24) + ' saat önce';
+}
+
+function uptimeText(sec) {
+  if (sec == null) return '—';
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return d + ' gün ' + h + ' saat';
+  if (h > 0) return h + ' saat ' + m + ' dakika';
+  return m + ' dakika';
+}
+
+// "2026-08-20 00:15:00 UTC" -> yerel saat
+function localTime(s) {
+  if (!s) return '—';
+  const d = new Date(s.replace(' UTC', 'Z').replace(' ', 'T'));
+  if (isNaN(d)) return s;
+  return d.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric',
+                                     hour: '2-digit', minute: '2-digit' });
+}
+
+/* Toplam üç bileşenden oluşur: gönderildi + bekleyen + bloke.
+   Bloke olanlar toplama dahil edilmezse kutudaki "veritabanındaki kayıt"
+   sayısı /health'teki gerçek toplamla uyuşmaz. */
+function setMeter(ids, pushed, pending, blocked) {
+  const total = (pushed || 0) + (pending || 0) + (blocked || 0);
+  $(ids.bar).style.width = pct(pushed, total) + '%';
+  $(ids.pushed).textContent = num(pushed);
+  $(ids.pending).textContent = num(pending);
+  $(ids.total).textContent = num(total);
+  const hasBlocked = (blocked || 0) > 0;
+  $(ids.blockedRow).hidden = !hasBlocked;
+  if (hasBlocked) $(ids.blocked).textContent = num(blocked);
+}
+
+/* Sağlık verisini panoya işleme adımı, onu ALMA adımından ayrıldı:
+   aynı yükü hem periyodik fetch hem SSE akışı besliyor. */
+function applyHealth(d) {
+    const m = d.metrics || {}, c = d.crowdstrike || {};
+
+    $('error').hidden = true;
+
+    // Durum şeridi — renk + metin birlikte, renk tek başına anlam taşımaz
+    const healthy = d.status === 'healthy';
+    $('statusDot').style.background = healthy ? 'var(--good)' : 'var(--warning)';
+    $('statusText').textContent = healthy ? 'Servis sağlıklı' : 'Servis uyarı durumunda';
+    $('statusWhy').textContent = healthy
+      ? '· son senkronizasyon ' + humanAge(m.sync_age_seconds)
+      : '· ' + (d.status_reason || 'ayrıntı yok');
+
+    // Kahraman rakam
+    const pushedTotal = (c.total_pushed_all_time || 0) + (c.total_pushed_domain_all_time || 0)
+                      + (c.total_pushed_hash_all_time || 0);
+    const dbTotal = (m.total_malicious_ips || 0) + (m.total_malicious_domains || 0)
+                  + (m.total_malicious_hashes || 0);
+    $('heroValue').textContent = num(pushedTotal);
+    $('heroNote').textContent = 'veritabanındaki ' + num(dbTotal)
+      + ' göstergenin %' + Math.round(pct(pushedTotal, dbTotal))
+      + "'i güvenlik altyapısına aktarıldı";
+
+    // KPI ölçerleri
+    setMeter({ bar: 'ipBar', pushed: 'ipPushed', pending: 'ipPending', total: 'ipTotal',
+               blocked: 'ipBlocked', blockedRow: 'ipBlockedRow' },
+             c.total_pushed_all_time, m.pending_ips, m.blocked_ips);
+    setMeter({ bar: 'dmBar', pushed: 'dmPushed', pending: 'dmPending', total: 'dmTotal',
+               blocked: 'dmBlocked', blockedRow: 'dmBlockedRow' },
+             c.total_pushed_domain_all_time, m.pending_domains, m.blocked_domains);
+    setMeter({ bar: 'hsBar', pushed: 'hsPushed', pending: 'hsPending', total: 'hsTotal',
+               blocked: 'hsBlocked', blockedRow: 'hsBlockedRow' },
+             c.total_pushed_hash_all_time, m.pending_hashes, m.blocked_hashes);
+
+    // Senkronizasyon paneli
+    $('lastSync').textContent = localTime(m.last_successful_sync) + ' · ' + humanAge(m.sync_age_seconds);
+    $('lastData').textContent = localTime(m.last_sync_timestamp);
+    $('nextSync').textContent = localTime(m.next_sync_timestamp);
+    $('schedState').innerHTML = m.scheduler_active
+      ? '<span class="pill" style="color:var(--good-text)">çalışıyor</span>'
+      : '<span class="pill" style="color:var(--critical)">durdu</span>';
+    $('uptime').textContent = uptimeText(d.uptime_seconds);
+
+    // CrowdStrike paneli
+    const conn = c.enabled && c.connection_status === 'connected';
+    $('csConn').innerHTML = conn
+      ? '<span class="pill" style="color:var(--good-text)">bağlı</span>'
+      : '<span class="pill" style="color:var(--critical)">' + (c.connection_status || 'kapalı') + '</span>';
+    $('csNet').textContent = c.network_action || '—';
+    $('csHash').textContent = c.hash_action || '—';
+    $('csLast').textContent = localTime(c.last_pushed_timestamp);
+    $('csSession').textContent = num(c.total_pushed_session);
+    // "Bağlı ama basmıyor" sessizce geçilmemeli: bu durumda yeni
+    // göstergeler toplanmaya devam eder ama EDR'a hiç ulaşmaz.
+    $('csPush').innerHTML = c.push_enabled === false
+      ? '<span class="pill" style="color:var(--warning)">kapalı</span>'
+      : '<span class="pill" style="color:var(--good-text)">açık</span>';
+
+    // Saklama politikası paneli
+    if (c.retention_days) {
+      $('retPolicy').textContent = Object.entries(c.retention_days)
+        .map(([src, days]) => src + ': ' + (days ? days + ' gün' : 'süresiz'))
+        .join(' · ');
+      $('retCap').textContent = num(c.retention_cap) + ' / tur';
+    }
+
+    // Sekme başlığı: pano arka planda dururken bile toplam görünür kalsın
+    document.title = nf.format(dbTotal) + ' gösterge · USOM Durum Panosu';
+
+    $('updated').textContent = (liveMode === 'sse' ? 'canlı akış · ' : 'canlı · ')
+      + new Date().toLocaleTimeString('tr-TR');
+    $('pulse').style.background = healthy ? 'var(--good)' : 'var(--warning)';
+}
+
+function showOffline(message) {
+  $('error').hidden = false;
+  $('error').textContent = 'Servise ulaşılamadı: ' + message + ' — '
+    + REFRESH_MS / 1000 + ' saniyede bir yeniden denenecek.';
+  $('updated').textContent = 'bağlantı yok';
+  $('pulse').style.background = 'var(--critical)';
+}
+
+async function refresh() {
+  try {
+    const r = await fetch('/health', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    applyHealth(await r.json());
+  } catch (e) {
+    showOffline(e.message);
+  }
+}
+
+/* ─────────────── Canlı akış ───────────────
+   SSE tek bağlantıdan besleniyor ama zorunlu bir bağımlılık değil: eski
+   bir sürüm bu ucu tanımıyorsa ya da araya giren bir vekil akışı
+   tamponluyorsa pano sessizce durmamalı. Bu yüzden önce polling başlar,
+   ilk SSE mesajı geldiğinde polling durdurulur; akış hiç kurulamazsa
+   polling devam eder. */
+let liveMode = 'poll';
+let pollTimer = null;
+
+function startPolling() {
+  if (pollTimer === null) pollTimer = setInterval(refresh, REFRESH_MS);
+}
+function stopPolling() {
+  if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function startLive() {
+  refresh();
+  startPolling();
+
+  if (!('EventSource' in window)) return;
+
+  let delivered = false, failures = 0, es;
+  try {
+    es = new EventSource('/events');
+  } catch (e) {
+    return;   // polling zaten çalışıyor
+  }
+
+  es.addEventListener('health', ev => {
+    delivered = true;
+    failures = 0;
+    liveMode = 'sse';
+    stopPolling();
+    try {
+      applyHealth(JSON.parse(ev.data));
+    } catch (e) {
+      // Bozuk yük akışı kapatmaz; bir sonraki mesaj düzelir.
+    }
+  });
+
+  es.onerror = () => {
+    failures++;
+    liveMode = 'poll';
+    // EventSource kendi kendine yeniden bağlanır; bu arada veri akmadığı
+    // için polling'i geri açıyoruz.
+    startPolling();
+    // Akış hiç kurulamadıysa ısrar etmenin anlamı yok — kapat.
+    if (!delivered && failures >= 3) es.close();
+  };
+}
+
+/* ─────────────── İstatistikler: grafik + geçmiş ─────────────── */
+
+const SERIES = [
+  { key: 'ip',     name: 'IP',     css: '--s-ip' },
+  { key: 'domain', name: 'Domain', css: '--s-domain' },
+  { key: 'hash',   name: 'Hash',   css: '--s-hash' },
+];
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+const JOB_NAMES = {
+  ip_delta: 'IP delta', ip_full: 'IP tam',
+  domain_delta: 'Domain delta', domain_full: 'Domain tam',
+  hash: 'Hash (MalwareBazaar)',
+};
+
+// Ekseni okunaklı yuvarlak bir tavana çıkar
+function niceMax(v) {
+  if (v <= 0) return 10;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const s of [1, 2, 2.5, 5, 10]) {
+    if (v <= s * mag) return s * mag;
+  }
+  return 10 * mag;
+}
+
+function shortDate(iso) {
+  const [, m, d] = iso.split('-');
+  return d + '.' + m;
+}
+
+function drawChart(daily) {
+  const svg = $('chart');
+  const W = Math.max(560, svg.clientWidth || 900), H = 220;
+  const padL = 46, padR = 8, padT = 10, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const totals = daily.map(d => d.ip + d.domain + d.hash);
+  const max = niceMax(Math.max(...totals, 1));
+  const y = v => padT + plotH - (v / max) * plotH;
+
+  const band = plotW / daily.length;
+  const barW = Math.min(24, band * 0.62);
+  const GAP = 2;   // yüzey boşluğu — yığın parçalarını ayıran şey bu, çizgi değil
+
+  let s = '';
+
+  // ızgara + y ekseni (yuvarlak, binlik ayraçlı)
+  for (let i = 0; i <= 4; i++) {
+    const v = (max / 4) * i, yy = y(v);
+    s += `<line class="gridline" x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}"/>`;
+    s += `<text class="axis-text" x="${padL - 8}" y="${yy + 3.5}" text-anchor="end">${nf.format(Math.round(v))}</text>`;
+  }
+
+  daily.forEach((d, i) => {
+    const cx = padL + band * i + band / 2;
+    const x = cx - barW / 2;
+    let acc = 0;
+    let cols = '';
+    SERIES.forEach(ser => {
+      const v = d[ser.key] || 0;
+      if (v <= 0) return;
+      const yTop = y(acc + v), yBot = y(acc);
+      let h = yBot - yTop;
+      // üstteki parçalar için 2px yüzey boşluğu bırak
+      const isTop = (acc + v) >= (d.ip + d.domain + d.hash) - 0.001;
+      if (!isTop) h = Math.max(1, h - GAP);
+      // veri ucu 4px yuvarlak, tabanda köşeli → yalnızca en üst parça yuvarlanır
+      const r = isTop ? Math.min(4, h / 2) : 0;
+      cols += `<path d="${roundedTopRect(x, yTop + (isTop ? 0 : GAP), barW, h, r)}" fill="${cssVar(ser.css)}"/>`;
+      acc += v;
+    });
+    if (cols) s += `<g class="colgroup" data-i="${i}">${cols}</g>`;
+    else s += `<g class="colgroup" data-i="${i}"></g>`;
+    // tarih etiketi: her 5 günde bir, kalabalık olmasın
+    if (i % 5 === 0 || i === daily.length - 1) {
+      s += `<text class="axis-text" x="${cx}" y="${H - 8}" text-anchor="middle">${shortDate(d.date)}</text>`;
+    }
+    // isabet alanı marktan geniş
+    s += `<rect class="hitbox" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${plotH}"/>`;
+  });
+
+  // taban çizgisi
+  s += `<line class="gridline" x1="${padL}" y1="${y(0)}" x2="${W - padR}" y2="${y(0)}"/>`;
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.innerHTML = s;
+
+  bindHover(svg, i => seriesTip(longDate(daily[i].date), daily[i]));
+}
+
+// Üstü yuvarlak, tabanı köşeli dikdörtgen yolu
+function roundedTopRect(x, yTop, w, h, r) {
+  if (h <= 0) return '';
+  r = Math.max(0, Math.min(r, w / 2, h));
+  return `M${x},${yTop + h} L${x},${yTop + r} Q${x},${yTop} ${x + r},${yTop} `
+       + `L${x + w - r},${yTop} Q${x + w},${yTop} ${x + w},${yTop + r} `
+       + `L${x + w},${yTop + h} Z`;
+}
+
+/* Tooltip üç grafiğin ortak katmanı. Her grafik kendi .hitbox
+   dikdörtgenlerini üretir, gösterilecek içeriği burada tarif eder.
+   Tooltip hiçbir değerin TEK okuma yolu değil — grafiklerin yanında ya
+   tablo görünümü ya da doğrudan etiket var. */
+function moveTip(ev) {
+  const t = $('tip'), pad = 14;
+  let x = ev.clientX + pad, yy = ev.clientY + pad;
+  const r = t.getBoundingClientRect();
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - pad;
+  if (yy + r.height > innerHeight - 8) yy = ev.clientY - r.height - pad;
+  t.style.left = x + 'px'; t.style.top = yy + 'px';
+}
+
+function bindHover(svg, buildHTML) {
+  const tip = $('tip');
+  svg.querySelectorAll('.hitbox').forEach(hb => {
+    hb.addEventListener('mouseenter', ev => {
+      const html = buildHTML(+hb.dataset.i);
+      if (!html) return;
+      tip.innerHTML = html;
+      tip.hidden = false;
+      moveTip(ev);
+    });
+    hb.addEventListener('mousemove', moveTip);
+    hb.addEventListener('mouseleave', () => { tip.hidden = true; });
+  });
+}
+
+/* Üç serinin değerlerini + toplamını veren standart tooltip gövdesi */
+function seriesTip(title, d) {
+  let rows = '';
+  SERIES.forEach(ser => {
+    rows += `<div class="trow"><span><i style="background:${cssVar(ser.css)}"></i>${ser.name}</span>`
+          + `<b>${nf.format(d[ser.key] || 0)}</b></div>`;
+  });
+  const total = (d.ip || 0) + (d.domain || 0) + (d.hash || 0);
+  return `<div class="tdate">${esc(title)}</div>` + rows
+    + `<div class="trow ttotal"><span>Toplam</span><b>${nf.format(total)}</b></div>`;
+}
+
+function longDate(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('tr-TR',
+    { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+/* Kaynak bazında dağılım — parça-bütün ilişkisi.
+   Yığılmış yatay çubuk + tam sayıları veren tablo (çubuğun okunabilir eşdeğeri). */
+function drawSources(sources, grand) {
+  if (!sources.length || !grand) return;
+
+  // Kaynak başına AYRI çubuk (small multiples).
+  //
+  // Önce hepsi tek bir yığılmış çubuktu ve renk gösterge tipini
+  // kodluyordu. İkinci bir kaynak eklenince çubukta iki mavi ve iki
+  // turuncu parça oluştu: hangi mavinin hangi kaynağa ait olduğu yalnızca
+  // tooltip ile anlaşılıyordu. Kaynak başına ayrı satır bu belirsizliği
+  // ortadan kaldırır — her satırın kimliği yanındaki etiket, renk ise
+  // satır içinde yalnızca tipi ayırır. Çubuklar aynı ölçeği (grand)
+  // paylaştığı için kaynaklar arası karşılaştırma da korunur.
+  $('srcBar').innerHTML = sources.map(src => {
+    const segs = (src.types || []).map(t =>
+      '<div style="width:' + (t.count / src.total * 100) + '%;background:'
+      + cssVar(TYPE_COLOR[t.type] || '--s-ip') + '"'
+      + ' title="' + esc(src.source + ' · ' + t.label + ': ' + num(t.count)) + '"></div>'
+    ).join('');
+    return '<div class="srcrow">'
+      + '<span class="hlabel" title="' + esc(src.source) + '">' + esc(src.source) + '</span>'
+      + '<span class="srctrack"><span class="stackbar" style="width:'
+      + (src.total / grand * 100) + '%">' + segs + '</span></span>'
+      + '<span class="hval">' + num(src.total) + '</span>'
+      + '</div>';
+  }).join('');
+
+  // Tablo: kaynak satırı kalın, altında tip kırılımı
+  let rows = '';
+  sources.forEach(src => {
+    rows += '<tr><td><b>' + src.source + '</b> <span style="color:var(--muted)">· '
+      + src.detail + '</span></td><td>tüm tipler</td>'
+      + '<td class="r"><b>' + num(src.total) + '</b></td>'
+      + '<td class="r"><b>%' + src.share + '</b></td></tr>';
+    (src.types || []).forEach(t => {
+      rows += '<tr><td style="color:var(--muted)">↳</td>'
+        + '<td><span class="tswatch" style="background:' + cssVar(TYPE_COLOR[t.type] || '--s-ip') + '"></span>'
+        + t.label + '</td>'
+        + '<td class="r">' + num(t.count) + '</td>'
+        + '<td class="r">%' + t.share + '</td></tr>';
+    });
+  });
+  $('srcBody').innerHTML = rows;
+
+  const top = sources.slice().sort((a, b) => b.total - a.total)[0];
+  $('srcNote').textContent = 'toplam ' + num(grand) + ' gösterge · '
+    + top.source + ' beslemesi %' + top.share + "'ini sağlıyor";
+}
+
+/* Tablo görünümü — grafiğin WCAG-temiz eşdeğeri.
+   Tooltip hiçbir değerin TEK okuma yolu olmamalı. */
+let lastDaily = [];
+
+function drawDailyTable(daily) {
+  $('dailyBody').innerHTML = daily.map(d => {
+    const t = d.ip + d.domain + d.hash;
+    return '<tr><td>' + new Date(d.date + 'T00:00:00').toLocaleDateString('tr-TR',
+             { day: '2-digit', month: '2-digit', year: 'numeric' }) + '</td>'
+      + '<td class="r">' + num(d.ip) + '</td>'
+      + '<td class="r">' + num(d.domain) + '</td>'
+      + '<td class="r">' + num(d.hash) + '</td>'
+      + '<td class="r"><b>' + num(t) + '</b></td></tr>';
+  }).join('');
+}
+
+$('viewToggle').addEventListener('click', () => {
+  const btn = $('viewToggle');
+  const showTable = btn.getAttribute('aria-pressed') !== 'true';
+  btn.setAttribute('aria-pressed', String(showTable));
+  btn.textContent = showTable ? 'Grafik görünümü' : 'Tablo görünümü';
+  $('chartView').hidden = showTable;
+  $('tableView').hidden = !showTable;
+  $('tip').hidden = true;
+  if (!showTable && lastDaily.length) drawChart(lastDaily);
+});
+
+function setPeriod(valId, breakId, p) {
+  if (!p) return;
+  $(valId).textContent = num(p.total);
+  $(breakId).textContent = 'IP ' + num(p.ip) + ' · Domain ' + num(p.domain) + ' · Hash ' + num(p.hash);
+}
+
+function fmtDuration(ms) {
+  if (ms == null) return '—';
+  if (ms < 1000) return ms + ' ms';
+  if (ms < 60000) return (ms / 1000).toFixed(1) + ' sn';
+  return Math.floor(ms / 60000) + ' dk ' + Math.round((ms % 60000) / 1000) + ' sn';
+}
+
+async function refreshStats() {
+  try {
+    const r = await fetch('/stats', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const s = await r.json();
+
+    drawSources(s.sources || [], s.grand_total || 0);
+    setPeriod('p24', 'p24b', s.periods && s.periods.last_24h);
+    setPeriod('p7',  'p7b',  s.periods && s.periods.last_7d);
+    setPeriod('p30', 'p30b', s.periods && s.periods.last_30d);
+
+    const daily = s.daily_additions || [];
+    if (daily.length) {
+      lastDaily = daily;
+      drawChart(daily);
+      drawDailyTable(daily);
+      const sum = daily.reduce((a, d) => a + d.ip + d.domain + d.hash, 0);
+      const active = daily.filter(d => d.ip + d.domain + d.hash > 0).length;
+      let note = 'toplam ' + num(sum) + ' yeni gösterge · ' + active + '/' + daily.length + ' günde kayıt alındı';
+      // Kayıtlı gün az olduğunda grafik "bozuk" izlenimi verebilir — sebebini yaz.
+      if (active < 7) {
+        note += ' · grafik servis çalıştıkça dolacak';
+      }
+      $('chartNote').textContent = note;
+    }
+
+    drawRejections(s.rejections, s.recent_rejections);
+    drawBlocked(s.blocked);
+    drawFailures(s.last_failures);
+
+    const rel = s.reliability_24h || {};
+    $('relNote').textContent = rel.total
+      ? 'son 24 saat: ' + rel.total + ' çalışma, ' + rel.ok + ' başarılı'
+        + (rel.failed ? ', ' + rel.failed + ' hatalı' : '')
+      : 'son 24 saatte kayıtlı çalışma yok';
+
+    const runs = s.recent_runs || [];
+    const body = $('runsBody');
+    if (!runs.length) {
+      body.innerHTML = '<tr><td colspan="6" class="empty">Henüz kayıtlı çalışma yok — ilk zamanlanmış görevden sonra burada listelenecek.</td></tr>';
+    } else {
+      body.innerHTML = runs.map(x => {
+        const okRun = x.status === 'ok';
+        let row = '<tr><td>' + esc(JOB_NAMES[x.job] || x.job) + '</td>'
+          + '<td>' + localTime(x.started_at) + '</td>'
+          + '<td class="r">' + num(x.new_records) + '</td>'
+          + '<td class="r">' + num(x.pushed) + '</td>'
+          + '<td class="r">' + fmtDuration(x.duration_ms) + '</td>'
+          + '<td class="r"><span class="' + (okRun ? 'ok' : 'bad') + '">'
+          + (okRun ? '✓ başarılı' : '✕ hata') + '</span></td></tr>';
+        // Hata satırının sebebi hemen altında: "✕ hata" tek başına
+        // müdahale için yeterli bilgi vermiyordu.
+        if (!okRun && x.detail) {
+          row += '<tr><td colspan="6" class="why" style="padding-top:0;color:var(--ink-2)">'
+            + esc(x.detail) + '</td></tr>';
+        }
+        return row;
+      }).join('');
+    }
+  } catch (e) {
+    $('chartNote').textContent = 'istatistikler alınamadı: ' + e.message;
+  }
+}
+
+/* ─────────────── Gönderilemeyen göstergeler ─────────────── */
+
+function drawRejections(summary, rows) {
+  const total = (summary && summary.total) || 0;
+  const reasons = (summary && summary.reasons) || [];
+
+  if (!total) {
+    $('rejNote').textContent = 'son 7 gün';
+    $('rejReasons').innerHTML =
+      '<div class="clean"><b>✓ Temiz</b> — son 7 günde reddedilen gösterge yok.</div>';
+    $('rejList').innerHTML = '';
+    return;
+  }
+
+  $('rejNote').textContent = 'son 7 günde ' + num(total) + ' gösterge reddedildi';
+
+  // Sebep başına oran: hangi redin baskın olduğu tek bakışta görünsün.
+  // Çubuk toplam rede göre ölçekleniyor, en büyük sebebe göre değil —
+  // eşit sayılarda hepsinin tam dolu görünmesi "her şey sınırda" gibi
+  // yanlış bir izlenim veriyordu.
+  $('rejReasons').innerHTML = reasons.map(r => {
+    const types = Object.keys(r.types || {})
+      .map(t => TYPE_LABEL[t] + ' ' + nf.format(r.types[t])).join(' · ');
+    return '<div class="reason">'
+      + '<div class="rhead">'
+      + '<span class="rname">' + esc(r.label) + '</span>'
+      + '<span class="rtypes">' + esc(types) + '</span>'
+      + '<span class="rcount">' + num(r.count) + ' · %'
+      + Math.round(r.count / total * 100) + '</span>'
+      + '</div>'
+      + '<span class="htrack" style="background:var(--track-domain)">'
+      + '<i class="hfill" style="width:' + Math.max(1.5, r.count / total * 100) + '%;'
+      + 'background:var(--critical)"></i></span>'
+      + '</div>';
+  }).join('');
+
+  // Ham liste: sınıflandırma neyi topladığını gizlemesin, asıl mesaj görünsün
+  $('rejList').innerHTML = (rows || []).map(x =>
+    '<div class="reject-row">'
+    + '<div>' + typeBadge(x.type) + ' <span class="val">' + esc(x.value) + '</span></div>'
+    + '<div class="rmeta">' + localTime(x.occurred_at) + '</div>'
+    + '<div class="why">' + esc(x.reason || x.label) + '</div>'
+    + '</div>'
+  ).join('');
+}
+
+/* Gönderim dışı bırakılan göstergeler.
+   Bunlar arıza değil, karar: ya CrowdStrike kabul etmiyor ya da biz
+   bilinçli olarak göndermiyoruz (imzasız hash, sistem ikilisi adı,
+   uzunluk sınırı). Kuyrukta dönmedikleri için tek görünürlük yeri burası. */
+function drawBlocked(blocked) {
+  const box = $('blockedBox');
+  if (!blocked) { box.hidden = true; return; }
+
+  const total = (blocked.ip || 0) + (blocked.domain || 0) + (blocked.hash || 0);
+  if (!total) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const parts = [];
+  ['ip', 'domain', 'hash'].forEach(t => {
+    if (blocked[t]) parts.push(TYPE_LABEL[t] + ' ' + num(blocked[t]));
+  });
+  $('blockedNote').textContent = num(total)
+    + ' gösterge gönderim dışı · ' + parts.join(' · ')
+    + ' · tekrar denenmiyorlar';
+
+  $('blockedList').innerHTML = (blocked.items || []).map(x =>
+    '<div class="reject-row">'
+    + '<div>' + typeBadge(x.type) + ' <span class="val">' + esc(x.value) + '</span></div>'
+    + '<div class="rmeta">' + localTime(x.added_at) + '</div>'
+    + '<div class="why">' + esc(x.reason || x.label || '') + '</div>'
+    + '</div>'
+  ).join('');
+}
+
+function drawFailures(failures) {
+  const list = failures || [];
+  if (!list.length) {
+    $('failNote').textContent = '';
+    $('failList').innerHTML =
+      '<div class="clean"><b>✓ Temiz</b> — kayıtlı görev hatası yok.</div>';
+    return;
+  }
+  $('failNote').textContent = list.length + ' görevin son hatası';
+  $('failList').innerHTML = list.map(f =>
+    '<div class="reject-row">'
+    + '<div><b>' + esc(JOB_NAMES[f.job] || f.job) + '</b></div>'
+    + '<div class="rmeta">' + localTime(f.started_at) + '</div>'
+    + '<div class="why">' + esc(f.detail || 'sebep kaydedilmemiş') + '</div>'
+    + '</div>'
+  ).join('');
+}
+
+/* ─────────────── Kümülatif büyüme (çizgi) ───────────────
+   Çizgilerin uçlarına doğrudan etiket konuyor: kimlik yalnızca renge
+   bağlı kalmıyor ve açık modda kontrastı düşük olan yeşil serinin
+   değeri her koşulda okunabiliyor. */
+
+function drawCumulative(rows) {
+  const svg = $('cumChart');
+  if (!rows || !rows.length) return;
+
+  const W = Math.max(560, svg.clientWidth || 900), H = 230;
+  const padL = 56, padR = 74, padT = 14, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const max = niceMax(Math.max(
+    ...rows.map(r => Math.max(r.ip || 0, r.domain || 0, r.hash || 0)), 1));
+  const x = i => padL + (rows.length === 1 ? plotW / 2 : plotW * i / (rows.length - 1));
+  const y = v => padT + plotH - (v / max) * plotH;
+
+  let s = '';
+  for (let i = 0; i <= 4; i++) {
+    const v = (max / 4) * i, yy = y(v);
+    s += `<line class="gridline" x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}"/>`;
+    s += `<text class="axis-text" x="${padL - 8}" y="${yy + 3.5}" text-anchor="end">${nf.format(Math.round(v))}</text>`;
+  }
+
+  // Uç etiketleri iki satırlık (seri adı + değer). Yukarıdan aşağıya
+  // ilerleyip her etikete en az LABEL_H aralık bırakılır; aksi hâlde
+  // birbirine yakın seriler tek bir okunamaz yığına dönüşür.
+  const LABEL_H = 28;
+  const TOP = padT + 4;
+  // Sınır, etiketin İKİNCİ satırı (değer, ly + 15) hesaba katılarak
+  // belirlenir; yoksa değer x ekseni etiketlerinin üstüne biner.
+  const BOTTOM = H - padB - 14;
+  const ends = SERIES.map(ser => ({
+    ser, v: rows[rows.length - 1][ser.key] || 0,
+  })).sort((a, b) => b.v - a.v);          // büyükten küçüğe = üstten alta
+
+  // 1) Yukarıdan aşağıya: çakışanları aşağı it
+  let prevY = -Infinity;
+  ends.forEach(e => {
+    e.ly = Math.max(y(e.v), prevY + LABEL_H, TOP);
+    prevY = e.ly;
+  });
+  // 2) Aşağıdan yukarıya: tabanı aşanları geri çek.
+  //    Tüm yığını birlikte kaydırmak yanlıştı — yeri bol olan en üstteki
+  //    etiketi de yukarı itip grafiğin dışına taşırıyordu (üretimde
+  //    "Domain" seri adı görünmez olmuştu). Burada yalnızca sınırı ihlal
+  //    eden etiketler, yalnızca gerektiği kadar hareket eder.
+  let limit = BOTTOM;
+  for (let k = ends.length - 1; k >= 0; k--) {
+    if (ends[k].ly > limit) ends[k].ly = Math.max(TOP, limit);
+    limit = ends[k].ly - LABEL_H;
+  }
+
+  SERIES.forEach(ser => {
+    const pts = rows.map((r, i) => `${x(i).toFixed(1)},${y(r[ser.key] || 0).toFixed(1)}`).join(' ');
+    s += `<polyline points="${pts}" fill="none" stroke="${cssVar(ser.css)}" `
+       + `stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const end = ends.find(e => e.ser.key === ser.key);
+    s += `<text class="axis-text" x="${W - padR + 8}" y="${end.ly + 3.5}" `
+       + `fill="${cssVar(ser.css)}" style="font-weight:600">${ser.name}</text>`;
+    s += `<text class="axis-text" x="${W - padR + 8}" y="${end.ly + 15}">${nf.format(end.v)}</text>`;
+  });
+
+  rows.forEach((r, i) => {
+    if (i % 5 === 0 || i === rows.length - 1) {
+      // Son tarih etiketi sağ kenara yaslanır: ortalanırsa serilerin uç
+      // etiket kolonuna taşıp üstüne biniyor.
+      const last = i === rows.length - 1;
+      s += `<text class="axis-text" x="${x(i)}" y="${H - 8}" `
+         + `text-anchor="${last ? 'end' : 'middle'}">${shortDate(r.date)}</text>`;
+    }
+    const band = plotW / rows.length;
+    s += `<rect class="hitbox" data-i="${i}" x="${x(i) - band / 2}" y="${padT}" `
+       + `width="${band}" height="${plotH}"/>`;
+  });
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.height = H + 'px';
+  svg.innerHTML = s;
+  bindHover(svg, i => seriesTip(longDate(rows[i].date), rows[i]));
+
+  const first = rows[0], last = rows[rows.length - 1];
+  const growth = last.total - first.total;
+  $('cumNote').textContent = 'pencere başında ' + num(first.total)
+    + ' → şimdi ' + num(last.total) + ' gösterge'
+    + (growth > 0 ? ' · ' + num(growth) + ' artış' : ' · artış yok');
+}
+
+/* ─────────────── Saat dağılımı ───────────────
+   Sunucu UTC kovaları döndürüyor. Tarayıcının farkı tam saat ise diziyi
+   döndürüp yerel saatle etiketliyoruz; tam saat değilse (yarım saatlik
+   dilimler) kaydırma yanlış olur — o durumda UTC olduğunu açıkça yazıyoruz. */
+
+function drawHours(hourly) {
+  const svg = $('hourChart');
+  const raw = (hourly && hourly.buckets) || [];
+  if (raw.length !== 24) return;
+
+  const offMin = new Date().getTimezoneOffset();
+  const canShift = offMin % 60 === 0;
+  const off = offMin / 60;
+  const rows = raw.map((_, h) => {
+    const src = canShift ? raw[((h + off) % 24 + 24) % 24] : raw[h];
+    return { hour: h, ip: src.ip, domain: src.domain, hash: src.hash };
+  });
+
+  const W = Math.max(560, svg.clientWidth || 900), H = 190;
+  const padL = 56, padR = 8, padT = 12, padB = 26;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const totals = rows.map(r => r.ip + r.domain + r.hash);
+  const max = niceMax(Math.max(...totals, 1));
+  const y = v => padT + plotH - (v / max) * plotH;
+  const band = plotW / 24;
+  const barW = Math.min(22, band * 0.66);
+  const GAP = 2;
+
+  let s = '';
+  for (let i = 0; i <= 4; i++) {
+    const v = (max / 4) * i, yy = y(v);
+    s += `<line class="gridline" x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}"/>`;
+    s += `<text class="axis-text" x="${padL - 8}" y="${yy + 3.5}" text-anchor="end">${nf.format(Math.round(v))}</text>`;
+  }
+
+  rows.forEach((d, i) => {
+    const cx = padL + band * i + band / 2;
+    const bx = cx - barW / 2;
+    const total = d.ip + d.domain + d.hash;
+    let acc = 0, cols = '';
+    SERIES.forEach(ser => {
+      const v = d[ser.key] || 0;
+      if (v <= 0) return;
+      const yTop = y(acc + v), yBot = y(acc);
+      let h = yBot - yTop;
+      const isTop = (acc + v) >= total - 0.001;
+      if (!isTop) h = Math.max(1, h - GAP);
+      const r = isTop ? Math.min(4, h / 2) : 0;
+      cols += `<path d="${roundedTopRect(bx, yTop + (isTop ? 0 : GAP), barW, h, r)}" fill="${cssVar(ser.css)}"/>`;
+      acc += v;
+    });
+    s += `<g class="colgroup" data-i="${i}">${cols}</g>`;
+    if (i % 3 === 0) {
+      s += `<text class="axis-text" x="${cx}" y="${H - 8}" text-anchor="middle">${String(d.hour).padStart(2, '0')}</text>`;
+    }
+    s += `<rect class="hitbox" data-i="${i}" x="${padL + band * i}" y="${padT}" width="${band}" height="${plotH}"/>`;
+  });
+  s += `<line class="gridline" x1="${padL}" y1="${y(0)}" x2="${W - padR}" y2="${y(0)}"/>`;
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.height = H + 'px';
+  svg.innerHTML = s;
+
+  const tzName = canShift ? 'yerel saat' : 'UTC';
+  bindHover(svg, i => seriesTip(
+    String(rows[i].hour).padStart(2, '0') + ':00 – '
+    + String((rows[i].hour + 1) % 24).padStart(2, '0') + ':00 (' + tzName + ')',
+    rows[i]));
+
+  // Tablo eşdeğeri: açık temada yeşil serinin yüzeye karşı kontrastı
+  // 3:1'in altında kaldığı için hiçbir değer yalnızca renk + tooltip ile
+  // okunabilir olmamalı.
+  $('hourBody').innerHTML = rows.map(r => {
+    const t = r.ip + r.domain + r.hash;
+    return '<tr><td>' + String(r.hour).padStart(2, '0') + ':00</td>'
+      + '<td class="r">' + num(r.ip) + '</td>'
+      + '<td class="r">' + num(r.domain) + '</td>'
+      + '<td class="r">' + num(r.hash) + '</td>'
+      + '<td class="r"><b>' + num(t) + '</b></td></tr>';
+  }).join('');
+
+  const sum = totals.reduce((a, b) => a + b, 0);
+  const peak = rows[totals.indexOf(Math.max(...totals))];
+  $('hourNote').textContent = sum
+    ? 'toplam ' + num(sum) + ' gösterge · en yoğun saat '
+      + String(peak.hour).padStart(2, '0') + ':00 (' + tzName + ')'
+    : 'son 7 günde kayıt yok';
+}
+
+$('hourToggle').addEventListener('click', () => {
+  const btn = $('hourToggle');
+  const showTable = btn.getAttribute('aria-pressed') !== 'true';
+  btn.setAttribute('aria-pressed', String(showTable));
+  btn.textContent = showTable ? 'Grafik görünümü' : 'Tablo görünümü';
+  $('hourView').hidden = showTable;
+  $('hourTableView').hidden = !showTable;
+  $('tip').hidden = true;
+  // Gizliyken çizilen SVG'nin clientWidth'i 0 olur; görünür olunca yeniden çiz
+  if (!showTable) renderDistribution();
+});
+
+/* ─────────────── Yatay çubuk dağılımları ─────────────── */
+
+function drawHBars(elId, noteId, data, colorVar, trackVar, noun) {
+  const items = (data && data.items) || [];
+  if (!items.length) {
+    $(elId).innerHTML = '';
+    $(noteId).textContent = 'gösterilecek kayıt yok';
+    return;
+  }
+  const max = Math.max(...items.map(i => i.count), 1);
+  const total = data.total || 0;
+  $(elId).innerHTML = items.map(it =>
+    '<div class="hbar">'
+    + '<span class="hlabel" title="' + esc(it.key) + '">' + esc(it.key) + '</span>'
+    + '<span class="htrack" style="background:var(' + trackVar + ')">'
+    + '<i class="hfill" style="width:' + (it.count / max * 100) + '%;background:var('
+    + colorVar + ')"></i></span>'
+    + '<span class="hval">' + num(it.count) + '</span>'
+    + '</div>'
+  ).join('');
+  const shown = items.reduce((a, i) => a + i.count, 0);
+  $(noteId).textContent = 'ilk ' + items.length + ' ' + noun + ' toplam '
+    + num(total) + ' kaydın %' + Math.round(shown / (total || 1) * 100) + "'ini kapsıyor"
+    + (data.other ? ' · kalan ' + num(data.other) : '');
+}
+
+/* ─────────────── Dağılım verisi ───────────────
+   Ayrı endpoint ve daha seyrek yenileme: bu sorgular tam tablo tarıyor,
+   dağılımlar da dakikada bir değişmiyor. */
+
+async function refreshDistribution() {
+  try {
+    const r = await fetch('/stats/distribution', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    lastDist = await r.json();
+    renderDistribution();
+  } catch (e) {
+    $('tldNote').textContent = 'dağılımlar alınamadı: ' + e.message;
+  }
+}
+
+let lastDist = null;
+
+function renderDistribution() {
+  if (!lastDist) return;
+  drawCumulative(lastDist.cumulative || []);
+  drawHours(lastDist.hourly);
+  drawHBars('tldBars', 'tldNote', lastDist.tld, '--s-domain', '--track-domain', 'uzantı');
+  drawHBars('subBars', 'subNote', lastDist.subnet16, '--s-ip', '--track-ip', 'blok');
+}
+
+/* ─────────────── Son eklenen göstergeler ─────────────── */
+
+let feedType = 'all';
+
+async function refreshFeed() {
+  try {
+    const r = await fetch('/recent?limit=60&type=' + encodeURIComponent(feedType),
+                          { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    const items = d.items || [];
+    if (!items.length) {
+      $('feedList').innerHTML = '<div class="clean">Kayıt yok.</div>';
+      $('feedNote').textContent = '';
+      return;
+    }
+    $('feedNote').textContent = items.length + ' kayıt · en yenisi '
+      + humanAge(Math.max(0, Math.floor(
+          (Date.now() - new Date(items[0].added_at).getTime()) / 1000)));
+    $('feedList').innerHTML = items.map(x =>
+      '<div class="fitem">'
+      + typeBadge(x.type)
+      + '<span class="val">' + esc(x.value) + '</span>'
+      + '<span class="ftime">' + localTime(x.added_at) + '</span>'
+      + '<span class="dotpush" title="' + (x.pushed ? 'CrowdStrike\'a gönderildi' : 'gönderim kuyruğunda')
+      + '" style="background:' + (x.pushed ? 'var(--good)' : 'var(--muted)') + '"></span>'
+      + '</div>'
+    ).join('');
+  } catch (e) {
+    $('feedNote').textContent = 'akış alınamadı: ' + e.message;
+  }
+}
+
+document.querySelectorAll('[data-feed]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    feedType = btn.dataset.feed;
+    document.querySelectorAll('[data-feed]').forEach(b =>
+      b.setAttribute('aria-pressed', String(b === btn)));
+    refreshFeed();
+  });
+});
+
+/* ─────────────── Gösterge sorgulama ─────────────── */
+
+/* Üç durum var, iki değil: gönderildi / kuyrukta / gönderim dışı.
+   "Bloke" olanı "kuyrukta" göstermek yanlış olurdu — beklemiyor. */
+function pushPill(m) {
+  /* Eski URL kaydında yerel 'pushed' bayrağı CrowdStrike'ın bugünkü
+     durumunu anlatmıyor; sunucu o satırlar için asıl yere bakıp
+     cs_present döndürüyor. Varsa söz ondadır. */
+  if (m.cs_present === true) {
+    return '<span class="pill" style="color:var(--critical)">CrowdStrike\'ta duruyor</span>';
+  }
+  if (m.cs_present === false) {
+    return '<span class="pill" style="color:var(--muted)">CrowdStrike\'ta yok</span>';
+  }
+  if (m.pushed) {
+    return '<span class="pill" style="color:var(--good-text)">gönderildi</span>';
+  }
+  if (m.blocked) {
+    return '<span class="pill" style="color:var(--critical)">gönderim dışı</span>';
+  }
+  return '<span class="pill" style="color:var(--warning)">kuyrukta</span>';
+}
+
+function renderLookup(d) {
+  const box = $('searchResult');
+  box.hidden = false;
+  let html = '';
+
+  if (!d.found) {
+    html += '<div class="rline"><b>Kayıt bulunamadı</b>'
+      + '<span class="rmeta">bu değer veritabanında yok</span></div>';
+
+    /* "Yerelde yok" tek başına yanıltıcı bir cevap: gösterge
+       CrowdStrike'ta durup engellemeye devam ediyor olabilir. Bu durumda
+       silinmesi gereken asıl kayıt odur ve operatör onu buradan silebilmeli. */
+    (d.crowdstrike_only || []).forEach(x => {
+      html += '<div class="del-note">' + typeBadge(x.type)
+        + '<span><span class="bad">CrowdStrike\'ta DURUYOR — hâlâ engelliyor</span>'
+        + ' · <span class="val">' + esc(x.value) + '</span>'
+        + (x.created_on ? ' · ' + localTime(x.created_on) + ' tarihinde eklenmiş' : '')
+        + (x.description ? ' · ' + esc(x.description) : '')
+        + ' · yerel veritabanında karşılığı yok</span>'
+        + '<button type="button" class="btn-danger" data-del-type="' + esc(x.type)
+        + '" data-del-value="' + esc(x.value) + '">Sil</button>'
+        + '</div>';
+    });
+  } else {
+    html += d.matches.map(m => {
+      let extra = 'eklendi ' + localTime(m.added_at);
+      // Eski URL tablosundan gelen kayıt: değer bir URL'nin ana makine
+      // adı, CrowdStrike'a da bu biçimde basılmıştı. Operatör neyi
+      // sildiğini bilmeli — bu satırın kaynağı artık beslenmiyor.
+      if (m.source === 'legacy-url') {
+        extra += ' · eski URL kaydı · ' + (m.legacy_url_count || 0) + ' URL';
+      }
+      if (m.type === 'hash' && m.matched_on === 'md5') extra += ' · md5 üzerinden eşleşti';
+      if (m.type === 'hash' && m.signature) extra += ' · aile: ' + esc(m.signature);
+      if (m.type === 'hash' && m.file_name) extra += ' · dosya: ' + esc(m.file_name);
+      let row = '<div class="rline">' + typeBadge(m.type)
+        + '<span class="val">' + esc(m.value) + '</span>'
+        + pushPill(m)
+        + '<span class="rmeta">' + extra + '</span>'
+        // Silme butonu satır başına: bir sorgu birden fazla tipte
+        // eşleşebilir (aynı değer hem domain hem hash olabilir) ve
+        // operatör hangisini sildiğini görmeden tıklamamalı.
+        + '<button type="button" class="btn-danger" data-del-type="' + esc(m.type)
+        + '" data-del-value="' + esc(m.value) + '">Sil</button>'
+        + '</div>';
+      // Gönderilmediyse sebebi hemen altında: aramanın asıl cevabı bu.
+      if (m.blocked && m.blocked_reason) {
+        row += '<div class="why" style="padding-bottom:9px">'
+             + esc(m.blocked_reason) + '</div>';
+      }
+      return row;
+    }).join('');
+  }
+
+  // Daha önce silinmişse bunu söyle. Aksi hâlde "kayıt bulunamadı"
+  // servisin veriyi kaçırdığı izlenimini verir; oysa kasıtlı bir karar.
+  if (d.deletions && d.deletions.length) {
+    // CrowdStrike durumu üç ayrı anlam taşıyor; yalnızca 'failed'
+    // operatörden aksiyon ister (gösterge orada duruyor, hâlâ engelliyor).
+    const CS_NOTE = {
+      removed:  '<span class="ok">CrowdStrike\'tan da kaldırıldı</span>',
+      absent:   'CrowdStrike\'ta zaten kayıtlı değildi',
+      disabled: 'CrowdStrike entegrasyonu kapalı',
+      pending:  'CrowdStrike durumu bilinmiyor',
+    };
+    html += d.deletions.map(x =>
+      '<div class="del-note">' + typeBadge(x.type)
+      + '<span>' + localTime(x.deleted_at) + ' tarihinde silindi · '
+      + (CS_NOTE[x.cs_status]
+         || '<span class="bad">CrowdStrike\'tan KALDIRILAMADI — hâlâ engelleniyor'
+            + (x.cs_detail ? ': ' + esc(x.cs_detail) : '') + '</span>')
+      + ' · senkronizasyonda geri gelmeyecek</span>'
+      + '<button type="button" class="btn-danger" style="color:var(--ink);'
+      + 'border-color:var(--ring)" data-restore-type="' + esc(x.type)
+      + '" data-restore-value="' + esc(x.value) + '">Geri al</button>'
+      + '</div>'
+    ).join('');
+  }
+
+  // Red kaydı, "kayıtta var ama gönderilmemiş" durumunun sebebini verir.
+  if (d.rejections && d.rejections.length) {
+    html += '<div class="rline" style="border-bottom:0"><b>Gönderim reddi</b></div>';
+    html += d.rejections.map(r =>
+      '<div class="reject-row"><div>' + typeBadge(r.type) + ' ' + esc(r.label) + '</div>'
+      + '<div class="rmeta">' + localTime(r.occurred_at) + '</div>'
+      + '<div class="why">' + esc(r.reason || '') + '</div></div>'
+    ).join('');
+  }
+
+  box.innerHTML = html;
+}
+
+/* Aramayı tekrar çalıştırır — silme/geri alma sonrası sonucu tazelemek için. */
+async function runLookup(q) {
+  const r = await fetch('/lookup?q=' + encodeURIComponent(q), { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  renderLookup(await r.json());
+  $('searchHint').textContent = 'Sorgu: ' + q;
+}
+
+/* Silme ve geri alma, sonuç kutusuna olay delegasyonu ile bağlanır:
+   satırlar her sorguda yeniden üretildiği için tek tek dinleyici
+   bağlamak sızıntı yaratırdı. */
+$('searchResult').addEventListener('click', async ev => {
+  const delBtn = ev.target.closest('[data-del-value]');
+  const resBtn = ev.target.closest('[data-restore-value]');
+  const q = $('q').value.trim();
+
+  if (delBtn) {
+    const value = delBtn.dataset.delValue;
+    const type = delBtn.dataset.delType;
+    // Yıkıcı işlem: CrowdStrike'tan silmek o göstergenin kurumda
+    // artık engellenmemesi demek. Onay metni ne olacağını açıkça yazar.
+    if (!confirm(
+      value + '\n\nBu gösterge:\n'
+      + '· CrowdStrike IOC veritabanından silinecek (artık engellenmeyecek)\n'
+      + '· yerel veritabanından silinecek\n'
+      + '· kalıcı dışlama listesine alınacak — senkronizasyonda geri gelmeyecek\n\n'
+      + 'Devam edilsin mi?'
+    )) return;
+
+    delBtn.disabled = true;
+    delBtn.textContent = 'siliniyor…';
+    try {
+      const r = await fetch('/indicators?value=' + encodeURIComponent(value)
+                            + '&type=' + encodeURIComponent(type),
+                            { method: 'DELETE', cache: 'no-store' });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.detail || ('HTTP ' + r.status));
+      await runLookup(q || value);
+      refresh();        // /health — KPI sayaçları
+      refreshStats();   // /stats — kaynak dağılımı ve dönemsel toplamlar
+    } catch (e) {
+      delBtn.disabled = false;
+      delBtn.textContent = 'Sil';
+      alert('Silme başarısız: ' + e.message);
+    }
+    return;
+  }
+
+  if (resBtn) {
+    const value = resBtn.dataset.restoreValue;
+    const type = resBtn.dataset.restoreType;
+    if (!confirm(
+      value + '\n\nDışlama kaldırılacak. Gösterge kaynakta hâlâ varsa bir '
+      + 'sonraki senkronizasyonda geri gelecek ve CrowdStrike\'a yeniden '
+      + 'gönderilecek.\n\nDevam edilsin mi?'
+    )) return;
+
+    resBtn.disabled = true;
+    try {
+      const r = await fetch('/indicators/restore?value=' + encodeURIComponent(value)
+                            + '&type=' + encodeURIComponent(type),
+                            { method: 'POST', cache: 'no-store' });
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(body.detail || ('HTTP ' + r.status));
+      await runLookup(q || value);
+    } catch (e) {
+      resBtn.disabled = false;
+      alert('Geri alma başarısız: ' + e.message);
+    }
+  }
+});
+
+/* Arama satırındaki Sil butonu: kutudaki değeri doğrudan siler.
+
+   Önce /lookup ile neyin silineceği öğrenilir — onay kutusunda "ne
+   silinecek" yazmadan onay istemek, operatöre boş bir soru sormaktır.
+   Değer veritabanında yoksa silme hiç denenmez. */
+$('deleteBtn').addEventListener('click', async () => {
+  const q = $('q').value.trim();
+  if (!q) { $('q').focus(); return; }
+
+  const btn = $('deleteBtn');
+  btn.disabled = true;
+  const restore = () => { btn.disabled = false; btn.textContent = 'Sil'; };
+
+  try {
+    btn.textContent = 'bakılıyor…';
+    const lr = await fetch('/lookup?q=' + encodeURIComponent(q), { cache: 'no-store' });
+    if (!lr.ok) throw new Error('HTTP ' + lr.status);
+    const d = await lr.json();
+    renderLookup(d);
+    $('searchHint').textContent = 'Sorgu: ' + q;
+
+    const orphans = d.crowdstrike_only || [];
+
+    // Yerelde kayıt yok ama CrowdStrike'ta duruyorsa silme BURADA
+    // durmamalı. Durursa operatör, hâlâ engelleme yapan bir göstergeyi
+    // panodan kaldıramaz — sorunun kendisi tam olarak buydu.
+    if (!d.found && !orphans.length) {
+      restore();
+      alert(q + '\n\nBu değer veritabanında yok — silinecek bir şey bulunamadı.'
+            + (d.deletions && d.deletions.length
+               ? '\n\nDaha önce silinmiş; sonuçtaki "Geri al" ile kurtarabilirsiniz.'
+               : ''));
+      return;
+    }
+
+    const summary = d.found
+      ? ('Silinecek kayıt: '
+         + [...new Set(d.matches.map(m => m.type))].join(', ')
+         + ' (' + d.matches.length + ' eşleşme)')
+      : ('Yerel veritabanında kaydı YOK, ancak CrowdStrike\'ta duruyor:\n'
+         + orphans.map(x => '· ' + x.type + ': ' + x.value).join('\n'));
+
+    if (!confirm(
+      q + '\n\n' + summary + '\n\nBu gösterge:\n'
+      + '· CrowdStrike IOC veritabanından silinecek (artık engellenmeyecek)\n'
+      + '· yerel veritabanından silinecek\n'
+      + '· kalıcı dışlama listesine alınacak — senkronizasyonda geri gelmeyecek\n\n'
+      + 'Devam edilsin mi?'
+    )) { restore(); return; }
+
+    btn.textContent = 'siliniyor…';
+    const r = await fetch('/indicators?value=' + encodeURIComponent(q) + '&type=auto',
+                          { method: 'DELETE', cache: 'no-store' });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.detail || ('HTTP ' + r.status));
+
+    await runLookup(q);
+    refresh();
+    refreshStats();
+    restore();
+
+    // CrowdStrike tarafı başarısızsa sessiz kalmak yanlış: gösterge
+    // yerel listeden düştü ama orada DURUYOR ve hâlâ engelliyor.
+    const failed = (body.deleted || []).filter(x => !x.crowdstrike_ok);
+    if (failed.length) {
+      alert('Yerel silme tamamlandı, ancak gösterge CrowdStrike\'ta duruyor:\n\n'
+            + failed.map(x => '· ' + x.type + ': ' + x.crowdstrike_detail).join('\n'));
+    }
+  } catch (e) {
+    restore();
+    alert('Silme başarısız: ' + e.message);
+  }
+});
+
+$('searchForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const q = $('q').value.trim();
+  if (!q) { $('searchResult').hidden = true; return; }
+  $('searchHint').textContent = 'sorgulanıyor…';
+  try {
+    await runLookup(q);
+  } catch (e) {
+    $('searchResult').hidden = false;
+    $('searchResult').innerHTML = '<div class="rline"><b>Sorgu başarısız</b>'
+      + '<span class="rmeta">' + esc(e.message) + '</span></div>';
+    $('searchHint').textContent = '';
+  }
+});
+
+/* ─────────────── Tema seçimi ─────────────── */
+
+function applyTheme(mode) {
+  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', mode);
+  try { localStorage.setItem('usom-theme', mode); } catch (e) { /* yoksay */ }
+  document.querySelectorAll('[data-theme-set]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.themeSet === mode)));
+  // SVG'ler rengi CSS değişkeninden okunan bir değerle GÖMÜLÜ olarak
+  // aldığı için (fill="#...") tema değişince yeniden çizilmeleri gerekir.
+  if (lastDaily.length) drawChart(lastDaily);
+  renderDistribution();
+}
+
+document.querySelectorAll('[data-theme-set]').forEach(btn => {
+  btn.addEventListener('click', () => applyTheme(btn.dataset.themeSet));
+});
+
+(function initTheme() {
+  let saved = 'auto';
+  try { saved = localStorage.getItem('usom-theme') || 'auto'; } catch (e) { /* yoksay */ }
+  document.querySelectorAll('[data-theme-set]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.themeSet === saved)));
+})();
+
+/* Sistem teması otomatik moddayken değişirse grafikleri yeniden çiz */
+if (window.matchMedia) {
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onScheme = () => {
+    if (!document.documentElement.hasAttribute('data-theme')) {
+      if (lastDaily.length) drawChart(lastDaily);
+      renderDistribution();
+    }
+  };
+  if (mq.addEventListener) mq.addEventListener('change', onScheme);
+  else if (mq.addListener) mq.addListener(onScheme);
+}
+
+/* ─────────────── Başlangıç ─────────────── */
+
+let resizeTimer;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (lastDaily.length) drawChart(lastDaily);
+    renderDistribution();
+  }, 250);
+});
+
+/* Saklama durumu. /retention/preview yalnızca sayar, yan etkisi yok —
+   ama üç tabloda COUNT çalıştırıyor, bu yüzden /health kadar sık değil
+   5 dakikada bir tazelenir. */
+async function refreshRetention() {
+  try {
+    const r = await fetch('/retention/preview', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+
+    $('retExpired').innerHTML = d.total
+      ? '<b>' + nf.format(d.total) + '</b> gösterge'
+        + (d.capped ? ' <span class="pill" style="color:var(--warning)">'
+                      + 'üst sınırı aşıyor, birden fazla turda temizlenecek</span>' : '')
+      : 'yok — temizlenecek bir şey kalmamış';
+
+    $('retNote').textContent = d.sources && d.sources.length
+      ? d.sources.map(s => s.kind + '/' + s.source + ': ' + nf.format(s.expired)).join(' · ')
+      : '';
+  } catch (e) {
+    $('retExpired').textContent = 'okunamadı (' + e.message + ')';
+  }
+}
+
+/* Son saklama turunu çalışma geçmişinden okur — ayrı bir uca gerek yok. */
+async function refreshRetentionRun() {
+  try {
+    const r = await fetch('/stats', { cache: 'no-store' });
+    if (!r.ok) return;
+    const s = await r.json();
+    const run = (s.recent_runs || []).find(x => x.job === 'retention');
+    $('retLast').textContent = run
+      ? localTime(run.started_at) + ' · ' + (run.detail || run.status)
+      : 'henüz çalışmadı';
+  } catch (e) { /* /stats zaten başka yerde raporlanıyor */ }
+}
+
+startLive();          // /health → SSE, kurulamazsa polling
+refreshStats();
+refreshDistribution();
+refreshFeed();
+refreshRetention();
+refreshRetentionRun();
+setInterval(refreshStats, 60000);          // grafik sorguları daha ağır
+setInterval(refreshFeed, 60000);
+setInterval(refreshDistribution, 300000);  // sunucuda da 5 dk önbellekli
+setInterval(refreshRetention, 300000);     // üç tabloda COUNT, sık çağrılmamalı
+setInterval(refreshRetentionRun, 300000);
+</script>
+</body>
+</html>
